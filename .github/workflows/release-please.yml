@@ -26,8 +26,9 @@ jobs:
         uses: actions/create-github-app-token@v1
         id: app-token
         with:
-          app-id: ${{ secrets.SJORSR_RELEASE_BOT_APP_ID }}
-          private-key: ${{ secrets.SJORSR_RELEASE_BOT_PRIVATE_KEY }}
+          # App client id is stored as a repo/org variable; the PEM key as a secret.
+          app-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Run release-please
         uses: googleapis/release-please-action@v4

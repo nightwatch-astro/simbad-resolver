@@ -19,15 +19,16 @@ CI. See [`.github/workflows/release-please.yml`](.github/workflows/release-pleas
 
 ## Required GitHub configuration
 
-### Secrets (for the `sjorsr-release-bot` App token)
+### Credentials (for the `sjorsr-release-bot` App token)
 
 The `release-please` job mints an installation token from the
-`sjorsr-release-bot` GitHub App. Set these repository secrets:
+`sjorsr-release-bot` GitHub App. These are set on the `nightwatch-astro` org (or
+this repo) — note the client id is a **variable**, the key is a **secret**:
 
-| Secret | Value |
-|---|---|
-| `SJORSR_RELEASE_BOT_APP_ID` | The `sjorsr-release-bot` App's App ID |
-| `SJORSR_RELEASE_BOT_PRIVATE_KEY` | A PEM private key generated for that App |
+| Name | Kind | Value |
+|---|---|---|
+| `RELEASE_APP_CLIENT_ID` | Variable | The App's Client ID |
+| `RELEASE_APP_PRIVATE_KEY` | Secret | A PEM private key generated for that App |
 
 The App must be installed on this repository with **Contents: read & write** and
 **Pull requests: read & write** permissions.
