@@ -37,3 +37,13 @@ the maintainer's input. Newest at the top of each section.
   ADQL percent-encoding, https endpoint check, `domain_core` dep, and dead `strsim`.
 - **Configurable id namespace** (UUIDv5) replacing the hardcoded `astro-plan.targets`.
 - **`otype_raw` escape hatch** retained alongside the closed `ObjectType`.
+- **Caldwell translation lives in the facade** (so both TAP and Sesame benefit);
+  direct `-tap`/`-sesame` users call `simbad-resolver-caldwell` themselves.
+- **Batch `drain()` is sequential** within a pass (polite to CDS; each pending
+  item processed at most once per call, transient failures released for retry).
+  True bounded parallelism is a future enhancement (kept simple + correct for v1).
+- **`apply_override`** makes the whole target `user-override` (sticky) and binds
+  the supplied alias; returns `None` if the target id is unknown.
+- **Parallel build via worktree subagents** (core/cache built directly; the 5
+  leaf crates built in isolated worktrees and merged). One worktree branched
+  from a pre-scaffold commit and self-corrected via `--ff-only`; no work lost.
