@@ -17,27 +17,34 @@ greenfield and pre-1.0, so it can be restructured freely.
 Collapse the workspace into a single crate, `simbad-resolver`, with modules
 where crates used to be.
 
-### Dependencies — bake in the essentials, gate only SQLite
+### Dependencies — bake in the essentials, one storage engine
 
 The library's purpose is resolving against SIMBAD over the network, so the HTTP
-stack and both resolvers are not optional:
+stack and both resolvers are not optional. Storage is a single engine that
+covers both durability modes:
 
 - **Always compiled:** the core types/normalization/identity, `reqwest`, the TAP
-  and Sesame resolvers, the in-memory cache (`dashmap`), and Caldwell.
-- **Optional (`sqlite` feature, off by default):** the SQLite backend (`sqlx`).
-  `sqlx` is heavy (long compile, large transitive tree) and many consumers only
-  need in-memory caching — this is the one place "pay for what you use" earns
-  its keep.
+  and Sesame resolvers, Caldwell, and **`redb`** — a pure-Rust embedded ACID
+  key-value store — as the one `Cache`/`Queue` backend.
+- **`redb` serves both modes at runtime:** `Store::open(path)` is file-backed and
+  persistent; `Store::in_memory()` uses redb's in-memory backend for an ephemeral
+  store. One implementation, no separate in-memory backend.
+- **Dropped:** `sqlx` (heavy) and `dashmap` (the separate in-memory cache) — redb
+  replaces both.
 
-The feature surface is exactly one flag: `sqlite`.
+The feature surface is empty for storage; the caller chooses the backend at
+runtime. (`FakeResolver` may sit behind an optional `test-util` feature for
+downstream test code.)
 
 ### Namespace — flat and ergonomic
 
 Primary types are re-exported at the crate root so consumers write
-`use simbad_resolver::{SimbadResolver, TapResolver, MemoryCache, ObjectType, ResolveError};`.
+`use simbad_resolver::{SimbadResolver, TapResolver, Store, ObjectType, ResolveError};`.
 Drop the redundant `Simbad` prefix on the network resolvers
 (`SimbadTapResolver` → `TapResolver`, `SimbadSesameResolver` → `SesameResolver`).
-`caldwell` stays a small public module.
+The redb-backed store is exposed as `Store` (with `open`/`in_memory`
+constructors and `cache()`/`queue()` accessors). `caldwell` stays a small public
+module.
 
 ### Release
 
