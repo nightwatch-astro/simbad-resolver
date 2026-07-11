@@ -1,9 +1,8 @@
 //! [`SqliteCache`]: the durable `Cache` implementation.
 //!
-//! Ported from astro-plan's `targeting/resolver/src/cache.rs` (runtime
-//! `sqlx::query`/`query_as`, no compile-time-checked macros — this workspace's
-//! `sqlx` feature set omits the offline-macro machinery). Dedup + source
-//! precedence follow `specs/001-simbad-target-resolution/data-model.md`.
+//! Uses runtime `sqlx::query`/`query_as` (no compile-time-checked macros —
+//! this workspace's `sqlx` feature set omits the offline-macro machinery).
+//! Dedup and source precedence are applied on upsert.
 
 use std::collections::HashMap;
 
@@ -65,9 +64,8 @@ async fn load_aliases(
 
 /// Assemble a [`CachedTarget`] from a `canonical_target` row plus its aliases.
 ///
-/// The schema has no `common_name` column (data-model.md keeps that column
-/// app-specific out of scope); it is reconstructed here as the first alias
-/// tagged [`AliasKind::CommonName`], which `upsert` always writes when
+/// The schema has no `common_name` column; it is reconstructed here as the
+/// first alias tagged [`AliasKind::CommonName`], which `upsert` always writes when
 /// `identity.common_name` is `Some`.
 async fn assemble(pool: &SqlitePool, row: CanonicalTargetRow) -> Result<CachedTarget, CacheError> {
     let (
@@ -224,7 +222,7 @@ struct ExistingRow {
 
 /// Find the row this identity should upsert into.
 ///
-/// Dedup precedence (FR-005/FR-007): if `simbad_oid` is non-null and a row
+/// Dedup precedence: if `simbad_oid` is non-null and a row
 /// with that oid exists, that row is the canonical one (keep its id so alias
 /// FKs stay valid). Otherwise fall back to the designation-derived id.
 async fn find_existing(

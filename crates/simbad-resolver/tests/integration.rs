@@ -179,6 +179,59 @@ async fn batch_drain_resolves_misses_and_retries_transient() {
     assert_eq!(unresolved.attempts, 1, "content miss consumes an attempt");
 }
 
+#[tokio::test]
+async fn search_is_network_free_and_delegates_to_cache() {
+    let f = facade(FakeResolver::new().with_response("M 31", m31()));
+    // Seed one target online (one resolver call).
+    f.resolve("M 31").await.unwrap();
+    assert_eq!(f.resolver().call_count(), 1);
+
+    // Typeahead search consults the cache only — SC-001: no network resolution.
+    let hits = f.search("andromeda", 10).await.unwrap();
+    assert!(!hits.is_empty());
+    assert!(hits.iter().any(|h| h.target.primary_designation == "M 31"));
+    assert_eq!(f.resolver().call_count(), 1, "search performs no network resolution");
+
+    // A blank query or a zero limit yields no hits.
+    assert!(f.search("   ", 10).await.unwrap().is_empty());
+    assert!(f.search("M 31", 0).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn batch_drain_spans_multiple_rounds_when_batch_size_is_small() {
+    let resolver = FakeResolver::new().with_response("M 31", m31());
+    // with_batch_size(0) clamps to 1 -> one item per round, forcing >1 round.
+    let batch = BatchResolver::new(
+        resolver,
+        MemoryCache::default(),
+        MemoryQueue::default(),
+        ResolverConfig::new("test.targets"),
+    )
+    .with_batch_size(0);
+
+    batch.enqueue("img1", "M 31").await.unwrap();
+    batch.enqueue("img2", "NGC 224").await.unwrap(); // alias of M31 -> cache hit
+    batch.enqueue("img3", "Andromeda Galaxy").await.unwrap(); // common name -> cache hit
+
+    let summary = batch.drain().await.unwrap();
+    assert_eq!(summary.resolved, 3, "all three drained across single-item rounds");
+    assert_eq!(summary.unresolved, 0);
+    assert_eq!(summary.still_pending, 0);
+    assert_eq!(batch.queue().pending_count().await.unwrap(), 0);
+}
+
+#[tokio::test]
+async fn caldwell_without_a_designation_is_unresolved_unknown() {
+    // C 99 (the Coalsack) has no NGC/IC designation in the Caldwell map, so the
+    // facade returns Unresolved{Unknown} without ever calling the resolver.
+    let f = facade(FakeResolver::new());
+    match f.resolve("C 99").await.unwrap() {
+        Resolution::Unresolved { reason, .. } => assert_eq!(reason, UnresolvedReason::Unknown),
+        Resolution::Resolved(t) => panic!("expected unresolved unknown, got resolved {t:?}"),
+    }
+    assert_eq!(f.resolver().call_count(), 0, "no network call for an untranslatable Caldwell id");
+}
+
 /// SC-006: the SAME facade code path works against the durable SQLite backend,
 /// unchanged — demonstrating cache-backend substitutability.
 #[cfg(feature = "sqlite")]

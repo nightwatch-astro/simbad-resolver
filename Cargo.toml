@@ -17,22 +17,22 @@ members = [
 ]
 
 [workspace.package]
-version = "0.0.0"
+version = "0.1.0"
 edition = "2021"
 rust-version = "1.82"
 license = "Apache-2.0"
-repository = "https://github.com/srobroek/simbad-resolver"
+repository = "https://github.com/nightwatch-astro/simbad-resolver"
 authors = ["Sjors Robroek <s.robroek@vxsan.com>"]
 
 [workspace.dependencies]
 # Internal crates (path-linked; version bumps handled by release-please later).
-simbad-resolver-core = { path = "crates/simbad-resolver-core", version = "0.0.0" }
-simbad-resolver-caldwell = { path = "crates/simbad-resolver-caldwell", version = "0.0.0" }
-simbad-resolver-tap = { path = "crates/simbad-resolver-tap", version = "0.0.0" }
-simbad-resolver-sesame = { path = "crates/simbad-resolver-sesame", version = "0.0.0" }
-simbad-resolver-cache = { path = "crates/simbad-resolver-cache", version = "0.0.0" }
-simbad-resolver-cache-memory = { path = "crates/simbad-resolver-cache-memory", version = "0.0.0" }
-simbad-resolver-cache-sqlite = { path = "crates/simbad-resolver-cache-sqlite", version = "0.0.0" }
+simbad-resolver-core = { path = "crates/simbad-resolver-core", version = "0.1.0" }
+simbad-resolver-caldwell = { path = "crates/simbad-resolver-caldwell", version = "0.1.0" }
+simbad-resolver-tap = { path = "crates/simbad-resolver-tap", version = "0.1.0" }
+simbad-resolver-sesame = { path = "crates/simbad-resolver-sesame", version = "0.1.0" }
+simbad-resolver-cache = { path = "crates/simbad-resolver-cache", version = "0.1.0" }
+simbad-resolver-cache-memory = { path = "crates/simbad-resolver-cache-memory", version = "0.1.0" }
+simbad-resolver-cache-sqlite = { path = "crates/simbad-resolver-cache-sqlite", version = "0.1.0" }
 
 # External — best crate per job (dependencies are unconstrained for this project).
 serde = { version = "1", features = ["derive"] }
@@ -56,6 +56,9 @@ sqlx = { version = "0.8", default-features = false, features = [
 ] }
 time = { version = "0.3", features = ["formatting", "parsing"] }
 tracing = "0.1"
+
+# Dev-only: offline HTTP mocking for the network resolver crates (-tap, -sesame).
+wiremock = "0.6"
 
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }

@@ -2,7 +2,7 @@
 //! [`OfflineResolver`], and (test-only) [`FakeResolver`].
 //!
 //! Object-safe via `async-trait` so a boxed `dyn Resolver` can be shared
-//! across an async runtime (contracts/resolver.md).
+//! across an async runtime.
 
 use crate::error::ResolveError;
 use crate::types::{PositionMatch, ResolvedIdentity};
@@ -233,6 +233,21 @@ mod tests {
         let _ = resolver.resolve("M 31").await;
         let _ = resolver.resolve("m31").await;
         assert_eq!(resolver.call_count(), 2);
+    }
+
+    #[tokio::test]
+    async fn fake_resolver_clone_resets_call_counter() {
+        let resolver = FakeResolver::new().with_response("M31", sample_identity());
+        let _ = resolver.resolve("M 31").await;
+        assert_eq!(resolver.call_count(), 1);
+
+        // A clone copies the canned responses but starts its own counter at 0.
+        let cloned = resolver.clone();
+        assert_eq!(cloned.call_count(), 0);
+        let got = cloned.resolve("M 31").await.unwrap();
+        assert_eq!(got.primary_designation, "M 31");
+        assert_eq!(cloned.call_count(), 1);
+        assert_eq!(resolver.call_count(), 1, "clone's calls do not affect the original");
     }
 
     #[tokio::test]

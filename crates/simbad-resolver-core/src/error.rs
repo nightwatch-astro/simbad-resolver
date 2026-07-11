@@ -7,7 +7,7 @@
 /// are content misses: the query itself did not resolve, so retrying it
 /// unchanged will not help. A resolver MUST NOT fabricate an identity: a
 /// content miss is always reported as one of these variants rather than a
-/// best-guess result (contracts/resolver.md).
+/// best-guess result.
 ///
 /// `Clone`/`Eq` let callers (e.g. a durable retry queue) retain the error
 /// across attempts without re-running the request.

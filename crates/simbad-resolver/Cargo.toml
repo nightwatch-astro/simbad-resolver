@@ -7,16 +7,21 @@
 # only what it needs.
 [package]
 name = "simbad-resolver"
-version.workspace = true
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description = "Generic, embeddable SIMBAD astronomical target resolver for Rust (name/position to canonical identity, pluggable cache)."
+description = "SIMBAD astronomical target resolver for Rust: resolve names, designations, and positions to canonical identities, with a pluggable cache."
 readme = "../../README.md"
 keywords = ["astronomy", "simbad", "catalog", "astrometry", "resolver"]
 categories = ["science", "api-bindings"]
+
+# Build the documentation on docs.rs with every backend feature enabled so the
+# optional SQLite/Sesame re-exports are included.
+[package.metadata.docs.rs]
+all-features = true
 
 [lints]
 workspace = true

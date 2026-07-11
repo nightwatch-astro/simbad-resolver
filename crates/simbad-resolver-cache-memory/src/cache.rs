@@ -1,8 +1,7 @@
 //! [`MemoryCache`]: an in-memory `Cache` impl backed by `dashmap`.
 //!
-//! Mirrors the dedup/precedence and ranked-search semantics of astro-plan's
-//! SQLite `targeting::resolver::cache` (the reference impl this crate's test
-//! suite is ported from), adapted from SQL tables to sharded maps:
+//! Mirrors the dedup/precedence and ranked-search semantics of the
+//! SQLite-backed cache, adapted from SQL tables to sharded maps:
 //! - `targets`: `id -> TargetRow` (the canonical row, aliases excluded).
 //! - `aliases`: `alias_id -> AliasRow` (mirrors the `target_alias` table; the
 //!   single source of truth for every alias, joined at read time).

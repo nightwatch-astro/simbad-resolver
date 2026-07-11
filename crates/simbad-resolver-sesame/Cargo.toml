@@ -1,6 +1,6 @@
 [package]
 name = "simbad-resolver-sesame"
-version.workspace = true
+version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -22,3 +22,4 @@ tracing = { workspace = true }
 [dev-dependencies]
 simbad-resolver-core = { workspace = true, features = ["test-fixture"] }
 tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
+wiremock = { workspace = true }

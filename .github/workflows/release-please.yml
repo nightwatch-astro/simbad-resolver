@@ -1,0 +1,66 @@
+name: release-please
+
+on:
+  push:
+    branches: [main]
+
+# No workflow-wide permissions; each job requests only what it needs.
+permissions: {}
+
+jobs:
+  # Maintain the release PR (changelog + version bumps) and, on merge, cut the
+  # git tags + GitHub releases for the workspace crates.
+  release-please:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    outputs:
+      releases_created: ${{ steps.release.outputs.releases_created }}
+    steps:
+      # Authenticate as the `sjorsr-release-bot` GitHub App rather than the
+      # default GITHUB_TOKEN: a PR opened with GITHUB_TOKEN does NOT trigger
+      # other workflows, so CI would never run on the release PR. An App token
+      # lets the release PR fire the CI workflow (unit tests) like any other PR.
+      - name: Mint sjorsr-release-bot app token
+        uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          # App client id is stored as a repo/org variable; the PEM key as a secret.
+          app-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
+      - name: Run release-please
+        uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ steps.app-token.outputs.token }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Publish to crates.io only when a release was just cut. Uses crates.io
+  # Trusted Publishing (OIDC): no long-lived CARGO_REGISTRY_TOKEN secret — the
+  # short-lived token is minted from the workflow's OIDC identity at run time.
+  publish:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.releases_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # required for the OIDC token exchange
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Authenticate to crates.io (Trusted Publishing / OIDC)
+        uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
+      # cargo publish --workspace (stable since cargo 1.90) publishes every
+      # member in dependency order and waits for each to appear in the index.
+      - name: Publish workspace crates
+        run: cargo publish --workspace
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
