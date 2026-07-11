@@ -4,4 +4,6 @@
 //! `specs/001-simbad-target-resolution/`.
 #![forbid(unsafe_code)]
 
-// implemented per spec
+mod caldwell;
+
+pub use caldwell::{caldwell_to_designation, entry_count, parse_caldwell_number};
