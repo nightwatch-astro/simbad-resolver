@@ -1,6 +1,6 @@
 //! # simbad-resolver
 //!
-//! Generic, embeddable **SIMBAD astronomical target resolver** for Rust.
+//! A **SIMBAD astronomical target resolver** for Rust.
 //!
 //! Resolves astronomical names, designations, and positions to canonical
 //! identities via SIMBAD, and provides the higher-level orchestration:
@@ -20,23 +20,6 @@
 //! }
 //! # Ok(()) }
 //! ```
-//!
-//! ## Ecosystem
-//!
-//! `simbad-resolver` is **upstream** (name → identity; produces objects). It
-//! composes with two sibling crates:
-//!
-//! - [`astro-angle`] — shared coordinate/angle primitives (`Equatorial`,
-//!   sexagesimal). Adopted as the coordinate type once it exists; decimal-degree
-//!   values behind a conversion seam until then.
-//! - [`target-match`] (formerly `astro-target-id`) — **downstream**: pointing +
-//!   FOV → ranked candidates. It *consumes* this crate's output; nothing flows
-//!   back into the resolver. Our cone search ([`PositionResolver`]) is a
-//!   complementary upstream-service query, not a duplicate of `target-match`'s
-//!   local ranking.
-//!
-//! [`astro-angle`]: https://github.com/srobroek/astro-angle
-//! [`target-match`]: https://github.com/srobroek/target-match
 #![forbid(unsafe_code)]
 
 pub mod caldwell;
