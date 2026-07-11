@@ -49,3 +49,4 @@ simbad-resolver-sesame = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
+simbad-resolver-core = { workspace = true, features = ["test-fixture"] }
