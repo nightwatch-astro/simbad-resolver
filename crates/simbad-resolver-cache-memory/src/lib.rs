@@ -3,9 +3,8 @@
 //! [`MemoryCache`] and [`MemoryQueue`] implement the `simbad-resolver-cache`
 //! traits entirely in-process (no persistence) — useful for tests, embedders
 //! without a durability requirement, and as the reference behavior the
-//! `-cache-sqlite` backend is verified against (SC-006). Part of the
-//! `simbad-resolver` workspace; implemented per
-//! `specs/001-simbad-target-resolution/`.
+//! `-cache-sqlite` backend is verified against. Part of the `simbad-resolver`
+//! workspace.
 #![forbid(unsafe_code)]
 
 mod cache;

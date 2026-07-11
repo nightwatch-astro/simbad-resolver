@@ -5,8 +5,6 @@
 //! store the async batch resolver drains. Both are `async` and object-safe;
 //! backends live in sibling crates (`simbad-resolver-cache-memory`,
 //! `simbad-resolver-cache-sqlite`) and callers may supply their own.
-//!
-//! Implemented per `specs/001-simbad-target-resolution/contracts/{cache,queue}.md`.
 #![forbid(unsafe_code)]
 
 use simbad_resolver_core::{ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource};

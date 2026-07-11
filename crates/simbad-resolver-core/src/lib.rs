@@ -11,8 +11,6 @@
 //! (no `tokio`, `reqwest`, or `sqlx`): every network-/DB-backed resolver
 //! implementation lives in a downstream crate (`simbad-resolver-tap`,
 //! `-sesame`, `-cache-sqlite`) that depends on this one, never the reverse.
-//! See `specs/001-simbad-target-resolution/data-model.md` and
-//! `contracts/resolver.md`.
 #![forbid(unsafe_code)]
 
 pub mod config;

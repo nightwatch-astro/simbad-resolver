@@ -1,11 +1,9 @@
 //! Pure TSV/wire parsing helpers for a SIMBAD TAP `basic` row.
 //!
-//! Ported from astro-plan's `targeting/resolver/src/simbad.rs`, minus the
-//! `csv`-crate tokenizer: this crate stays free of that dependency, so
-//! [`parse_basic_row`] splits on the tab delimiter directly. SIMBAD's TAP
-//! `format=tsv` output never quotes a tab inside a string column, so a plain
-//! `split('\t')` is equivalent to the RFC-4180 reader for this fixed 5-column
-//! shape.
+//! This crate stays free of a `csv`-crate tokenizer, so [`parse_basic_row`]
+//! splits on the tab delimiter directly. SIMBAD's TAP `format=tsv` output
+//! never quotes a tab inside a string column, so a plain `split('\t')` is
+//! equivalent to the RFC-4180 reader for this fixed 5-column shape.
 
 /// Strip SIMBAD's surrounding double quotes (TSV string columns are quoted)
 /// and outer whitespace.

@@ -22,7 +22,7 @@
 //! without the alias round-trip: each hit's only alias is its primary
 //! designation.
 //!
-//! ## Gotchas (carried over from the astro-plan seed-builder)
+//! ## Gotchas
 //!
 //! - **`format=tsv`**: string columns are double-quoted; numeric columns are
 //!   not. [`simbad_resolver_core::wire`] strips quotes and collapses internal
