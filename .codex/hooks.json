@@ -1,0 +1,106 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/hooks-quality/scripts/quality-before-commit.sh",
+            "if": "Bash(git commit*)",
+            "timeout": 10
+          }
+        ],
+        "_apm_source": "hooks-quality"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/release-please/scripts/release-please-guard.sh"
+          }
+        ],
+        "_apm_source": "release-please"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/secrets-scan/scripts/secrets-precommit-guard.sh",
+            "if": "Bash(git commit *)"
+          }
+        ],
+        "_apm_source": "secrets-scan"
+      },
+      {
+        "matcher": "apply_patch|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
+            "timeout": 3
+          }
+        ],
+        "_apm_source": "agent-coder"
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "apply_patch|Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
+            "timeout": 3
+          }
+        ],
+        "_apm_source": "hooks-quality"
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/speckit/scripts/speckit-task-commit-check.sh",
+            "if": "Bash(git commit*)"
+          }
+        ],
+        "_apm_source": "speckit"
+      },
+      {
+        "matcher": "apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/speckit/scripts/speckit-task-issue-sync.sh"
+          }
+        ],
+        "_apm_source": "speckit"
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/steering-pragmatic/scripts/inject-working-style.sh",
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "steering-pragmatic"
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".codex/hooks/code-intelligence/scripts/subagent-context-inject.sh",
+            "timeout": 5
+          }
+        ],
+        "_apm_source": "code-intelligence"
+      }
+    ]
+  }
+}

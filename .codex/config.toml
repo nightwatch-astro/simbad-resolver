@@ -1,0 +1,13 @@
+[mcp_servers.context7]
+command = "npx"
+args = [ "-y", "@upstash/context7-mcp",]
+id = ""
+
+[mcp_servers.mcp-package-version]
+command = "npx"
+args = [ "-y", "mcp-package-version",]
+id = ""
+
+[mcp_servers.context7.env]
+
+[mcp_servers.mcp-package-version.env]

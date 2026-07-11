@@ -1,0 +1,3 @@
+# Domain terminology (RA/Dec, SIMBAD, otype, ADQL) is not backtick-suited; the
+# doc-markdown lint is relaxed per-item where needed rather than globally.
+avoid-breaking-exported-api = false

@@ -1,0 +1,34 @@
+name: simbad-resolver
+version: 1.0.0
+description: APM project for simbad-resolver — a generic SIMBAD target resolver crate.
+author: Sjors Robroek
+dependencies:
+  apm:
+  - srobroek/agentic-packages/packages/core#main
+  - srobroek/agentic-packages/packages/steering-pragmatic#main
+  - srobroek/agentic-packages/packages/orchestrate#main
+  - srobroek/agentic-packages/packages/release-please#main
+  - srobroek/agentic-packages/packages/speckit#main
+  - srobroek/agentic-packages/packages/steering-speckit#main
+  - srobroek/agentic-packages/packages/language-rust#main
+  - srobroek/agentic-packages/packages/language-steering-rust#main
+  - srobroek/agentic-packages/packages/rust-quality#main
+  - srobroek/agentic-packages/packages/lsp-rust#main
+  - srobroek/agentic-packages/packages/hooks-quality#main
+  - srobroek/agentic-packages/packages/docs-architecture#main
+  - srobroek/agentic-packages/packages/steering-docs-specs#main
+  - srobroek/agentic-packages/packages/secrets-scan#main
+  - srobroek/agentic-packages/packages/dep-audit#main
+  - srobroek/agentic-packages/packages/mcp-context7#main
+  - srobroek/agentic-packages/packages/mcp-package-version#main
+includes: auto
+scripts:
+  install-agentic-tools: apm install --target claude,codex,agent-skills --update
+  compile-agentic-tools: apm compile --target codex --no-constitution && apm compile
+    --target claude --no-constitution
+  setup-agentic-tools: apm run install-agentic-tools && apm run compile-agentic-tools
+compilation:
+  strategy: distributed
+  source_attribution: false
+  placement:
+    min_instructions_per_file: 1

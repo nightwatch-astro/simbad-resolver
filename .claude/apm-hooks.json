@@ -1,0 +1,144 @@
+{
+  "PreToolUse": [
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/hooks-quality/scripts/quality-before-commit.sh",
+          "if": "Bash(git commit*)",
+          "timeout": 10
+        }
+      ],
+      "_apm_source": "hooks-quality"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/release-please/scripts/release-please-guard.sh"
+        }
+      ],
+      "_apm_source": "release-please"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/secrets-scan/scripts/secrets-precommit-guard.sh",
+          "if": "Bash(git commit *)"
+        }
+      ],
+      "_apm_source": "secrets-scan"
+    },
+    {
+      "matcher": "Skill",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-context7-reminder.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-issue-close-guard.sh"
+        },
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-issue-label-guard.sh"
+        },
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-pr-issue-refs.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    },
+    {
+      "matcher": "apply_patch|Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/agent-coder/scripts/coder-delegation-reminder.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "agent-coder"
+    }
+  ],
+  "PostToolUse": [
+    {
+      "matcher": "apply_patch|Edit|Write|MultiEdit",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/hooks-quality/scripts/quality-edit-advisory.sh",
+          "timeout": 3
+        }
+      ],
+      "_apm_source": "hooks-quality"
+    },
+    {
+      "matcher": "Bash",
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-task-commit-check.sh",
+          "if": "Bash(git commit*)"
+        }
+      ],
+      "_apm_source": "speckit"
+    }
+  ],
+  "UserPromptSubmit": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-deferred-issues.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    }
+  ],
+  "Stop": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/speckit/scripts/speckit-stop-gate.sh"
+        }
+      ],
+      "_apm_source": "speckit"
+    }
+  ],
+  "SubagentStart": [
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/steering-pragmatic/scripts/inject-working-style.sh",
+          "timeout": 5
+        }
+      ],
+      "_apm_source": "steering-pragmatic"
+    },
+    {
+      "hooks": [
+        {
+          "type": "command",
+          "command": ".claude/hooks/code-intelligence/scripts/subagent-context-inject.sh",
+          "timeout": 5
+        }
+      ],
+      "_apm_source": "code-intelligence"
+    }
+  ]
+}

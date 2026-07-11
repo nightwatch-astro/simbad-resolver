@@ -1,0 +1,28 @@
+# simbad-resolver — the main installable facade crate.
+#
+# Re-exports the resolver ecosystem (core types, TAP + Sesame clients, the
+# pluggable Cache trait) and provides the higher-level orchestration:
+# cache-first resolve, sticky user-override precedence, and an async batch
+# resolver. Feature flags select the optional impls so a lean install pulls
+# only what it needs. This is a placeholder skeleton; the real surface is
+# implemented per specs/.
+[package]
+name = "simbad-resolver"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description.workspace = true
+readme = "../../README.md"
+keywords = ["astronomy", "simbad", "catalog", "astrometry", "resolver"]
+categories = ["science", "api-bindings"]
+
+[lints]
+workspace = true
+
+[dependencies]
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }

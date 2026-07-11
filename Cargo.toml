@@ -1,0 +1,56 @@
+# simbad-resolver — Cargo workspace root.
+#
+# A generic, embeddable SIMBAD astronomical target resolver for Rust. The crate
+# set is split granularly (see docs/adr/0001-stack-and-architecture.md); the
+# main installable facade is `simbad-resolver`. Additional member crates
+# (simbad-resolver-core, -tap, -sesame, -cache, -cache-memory, -cache-sqlite,
+# -caldwell) are added as they are implemented per the spec.
+[workspace]
+resolver = "2"
+members = ["crates/simbad-resolver"]
+
+[workspace.package]
+version = "0.0.0"
+edition = "2021"
+rust-version = "1.82"
+license = "Apache-2.0"
+repository = "https://github.com/srobroek/simbad-resolver"
+authors = ["Sjors Robroek <s.robroek@vxsan.com>"]
+description = "Generic, embeddable SIMBAD astronomical target resolver for Rust."
+
+# Shared dependency pins for the workspace. Member crates opt in via
+# `dep = { workspace = true }` so versions/features stay consistent. Feature
+# sets are deliberately minimal here and refined per-crate as they land.
+[workspace.dependencies]
+# Pure core
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+uuid = { version = "1", features = ["serde", "v4", "v5"] }
+unicode-normalization = "0.1"
+# Async resolver surface
+async-trait = "0.1"
+tokio = { version = "1", features = ["rt", "macros"] }
+# HTTP (SIMBAD TAP + Sesame); rustls-only, no default TLS backend
+reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
+percent-encoding = "2"
+csv = "1"
+# Cache backends
+dashmap = "6"
+sqlx = { version = "0.9", default-features = false, features = [
+    "sqlite",
+    "runtime-tokio",
+    "tls-rustls",
+    "migrate",
+    "uuid",
+    "time",
+] }
+# Time (RFC3339 resolved_at) + tracing
+time = { version = "0.3", features = ["formatting", "parsing"] }
+tracing = "0.1"
+
+[workspace.lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+
+[workspace.lints.rust]
+missing_docs = "warn"

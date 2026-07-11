@@ -1,0 +1,28 @@
+# Rust
+/target
+**/*.rs.bk
+*.pdb
+
+# Cargo — commit Cargo.lock for the final binary/reproducible builds; for a
+# library workspace it is conventional to ignore it. Kept ignored here since
+# this is a library workspace.
+Cargo.lock
+
+# Env / local
+.env
+.env.*
+!.env.example
+
+# Editor / OS
+.DS_Store
+*.swp
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Agentic tooling runtime artifacts
+/.project-setup/
+
+
+# APM dependencies
+apm_modules/
