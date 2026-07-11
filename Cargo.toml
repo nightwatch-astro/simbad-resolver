@@ -57,6 +57,9 @@ sqlx = { version = "0.8", default-features = false, features = [
 time = { version = "0.3", features = ["formatting", "parsing"] }
 tracing = "0.1"
 
+# Dev-only: offline HTTP mocking for the network resolver crates (-tap, -sesame).
+wiremock = "0.6"
+
 [workspace.lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
