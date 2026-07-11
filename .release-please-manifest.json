@@ -1,10 +1,10 @@
 {
-  "crates/simbad-resolver-core": "0.1.0",
-  "crates/simbad-resolver-caldwell": "0.1.0",
-  "crates/simbad-resolver-cache": "0.1.0",
-  "crates/simbad-resolver-cache-memory": "0.1.0",
-  "crates/simbad-resolver-cache-sqlite": "0.1.0",
-  "crates/simbad-resolver-tap": "0.1.0",
-  "crates/simbad-resolver-sesame": "0.1.0",
-  "crates/simbad-resolver": "0.1.0"
+  "crates/simbad-resolver-core": "0.1.1",
+  "crates/simbad-resolver-caldwell": "0.1.1",
+  "crates/simbad-resolver-cache": "0.1.1",
+  "crates/simbad-resolver-cache-memory": "0.1.1",
+  "crates/simbad-resolver-cache-sqlite": "0.1.1",
+  "crates/simbad-resolver-tap": "0.1.1",
+  "crates/simbad-resolver-sesame": "0.1.1",
+  "crates/simbad-resolver": "0.1.1"
 }
