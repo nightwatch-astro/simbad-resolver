@@ -169,7 +169,7 @@ async fn resolve_with_enricher_replaces_coarse_identity() {
     let server = MockServer::start().await;
     mount_body(&server, M31_SNV_XML).await;
 
-    let enriched = ResolvedIdentity {
+    let tap_identity = ResolvedIdentity {
         simbad_oid: Some(1_575_544),
         primary_designation: "M 31".to_owned(),
         common_name: Some("Andromeda Galaxy".to_owned()),
@@ -183,8 +183,8 @@ async fn resolve_with_enricher_replaces_coarse_identity() {
         ],
         source: TargetSource::Resolved,
     };
-    let enricher =
-        Arc::new(FakeResolver::new().with_response("M 31", enriched.clone())) as Arc<dyn Resolver>;
+    let enricher = Arc::new(FakeResolver::new().with_response("M 31", tap_identity.clone()))
+        as Arc<dyn Resolver>;
     let resolver = SimbadSesameResolver::with_config(config_at(&server, Duration::from_secs(5)))
         .with_enricher(enricher);
 

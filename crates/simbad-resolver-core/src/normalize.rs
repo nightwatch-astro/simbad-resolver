@@ -162,6 +162,32 @@ mod tests {
     }
 
     #[test]
+    fn normalize_expands_every_catalog_prefix() {
+        assert_eq!(normalize("B33"), "b 33");
+        assert_eq!(normalize("C14"), "c 14");
+        assert_eq!(normalize("Arp273"), "arp 273");
+        assert_eq!(normalize("vdB1"), "vdb 1");
+        assert_eq!(normalize("LDN1250"), "ldn 1250");
+        assert_eq!(normalize("LBN500"), "lbn 500");
+        assert_eq!(normalize("Mel15"), "mel 15");
+        assert_eq!(normalize("Abell2151"), "abell 2151");
+        assert_eq!(normalize("Barnard33"), "barnard 33");
+        assert_eq!(normalize("Sharpless155"), "sharpless 155");
+        assert_eq!(normalize("Melotte15"), "melotte 15");
+        assert_eq!(normalize("Caldwell14"), "caldwell 14");
+        assert_eq!(normalize("OpenNGC42"), "openngc 42");
+    }
+
+    #[test]
+    fn normalize_prefix_without_trailing_digit_is_unchanged() {
+        // A bare prefix with no following digit must not gain a space.
+        assert_eq!(normalize("M"), "m");
+        assert_eq!(normalize("IC"), "ic");
+        assert_eq!(normalize("Barnard"), "barnard");
+        assert_eq!(normalize("Mel"), "mel");
+    }
+
+    #[test]
     fn normalize_with_existing_space_unchanged() {
         assert_eq!(normalize("NGC 224"), "ngc 224");
     }

@@ -314,6 +314,76 @@ mod tests {
     }
 
     #[test]
+    fn map_otype_covers_full_otype_vocabulary() {
+        use ObjectType as OT;
+        // Every recognised code + long-form label in the mapping table.
+        let cases: &[(&str, ObjectType)] = &[
+            ("G", OT::Galaxy),
+            ("GiC", OT::Galaxy),
+            ("GiG", OT::Galaxy),
+            ("GiP", OT::Galaxy),
+            ("IG", OT::Galaxy),
+            ("PaG", OT::Galaxy),
+            ("AGN", OT::Galaxy),
+            ("SBG", OT::Galaxy),
+            ("rG", OT::Galaxy),
+            ("LSB", OT::Galaxy),
+            ("AG?", OT::Galaxy),
+            ("EmG", OT::Galaxy),
+            ("BiC", OT::Galaxy),
+            ("H2G", OT::Galaxy),
+            ("Sy1", OT::Galaxy),
+            ("Sy2", OT::Galaxy),
+            ("SyG", OT::Galaxy),
+            ("Galaxy", OT::Galaxy),
+            ("PN", OT::PlanetaryNebula),
+            ("PN?", OT::PlanetaryNebula),
+            ("pA*", OT::PlanetaryNebula),
+            ("PlanetaryNebula", OT::PlanetaryNebula),
+            ("HII", OT::EmissionNebula),
+            ("EmO", OT::EmissionNebula),
+            ("ISM", OT::EmissionNebula),
+            ("RNe?", OT::EmissionNebula),
+            ("EmissionNebula", OT::EmissionNebula),
+            ("RNe", OT::ReflectionNebula),
+            ("ReflectionNebula", OT::ReflectionNebula),
+            ("DNe", OT::DarkNebula),
+            ("MoC", OT::DarkNebula),
+            ("glb", OT::DarkNebula),
+            ("cor", OT::DarkNebula),
+            ("GNe", OT::DarkNebula),
+            ("DarkNebula", OT::DarkNebula),
+            ("OpC", OT::OpenCluster),
+            ("Cl*", OT::OpenCluster),
+            // `As*` is SIMBAD's stellar-association code, intentionally bucketed
+            // as an open cluster (not the visual-asterism sense).
+            ("As*", OT::OpenCluster),
+            ("OpenCluster", OT::OpenCluster),
+            ("GlC", OT::GlobularCluster),
+            ("GlobularCluster", OT::GlobularCluster),
+            ("SNR", OT::SupernovaRemnant),
+            ("SNR?", OT::SupernovaRemnant),
+            ("SuperNovaRemnant", OT::SupernovaRemnant),
+            ("SupernovaRemnant", OT::SupernovaRemnant),
+            ("ClG", OT::GalaxyCluster),
+            ("GrG", OT::GalaxyCluster),
+            ("CGG", OT::GalaxyCluster),
+            ("SCG", OT::GalaxyCluster),
+            ("GalaxyCluster", OT::GalaxyCluster),
+            ("**", OT::DoubleStar),
+            ("**?", OT::DoubleStar),
+            ("EB*", OT::DoubleStar),
+            ("SB*", OT::DoubleStar),
+            ("DoubleStar", OT::DoubleStar),
+            // Only the long-form label maps to the visual-asterism bucket.
+            ("Asterism", OT::Asterism),
+        ];
+        for (code, want) in cases {
+            assert_eq!(map_otype(code), *want, "otype code {code:?} should map to {want:?}");
+        }
+    }
+
+    #[test]
     fn map_otype_unknown_is_other() {
         assert_eq!(map_otype("ZZZ"), ObjectType::Other);
         assert_eq!(map_otype(""), ObjectType::Other);

@@ -247,3 +247,48 @@ pub trait Queue: Send + Sync {
     /// Count items still `pending`.
     async fn pending_count(&self) -> Result<usize, QueueError>;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use simbad_resolver_core::AliasKind;
+
+    #[test]
+    fn pending_state_wire_round_trips() {
+        for st in [PendingState::Pending, PendingState::Resolved, PendingState::Unresolved] {
+            assert_eq!(PendingState::from_wire(st.as_wire()), Some(st));
+        }
+        assert_eq!(PendingState::Pending.as_wire(), "pending");
+        assert_eq!(PendingState::Resolved.as_wire(), "resolved");
+        assert_eq!(PendingState::Unresolved.as_wire(), "unresolved");
+        assert_eq!(PendingState::from_wire("bogus"), None);
+        assert_eq!(PendingState::from_wire(""), None);
+    }
+
+    #[test]
+    fn cached_target_to_identity_preserves_the_identity_fields() {
+        let target = CachedTarget {
+            id: Uuid::nil(),
+            simbad_oid: Some(1_575_544),
+            primary_designation: "M 31".to_owned(),
+            common_name: Some("Andromeda Galaxy".to_owned()),
+            object_type: ObjectType::Galaxy,
+            otype_raw: "G".to_owned(),
+            ra_deg: 10.684_708,
+            dec_deg: 41.268_75,
+            source: TargetSource::Resolved,
+            resolved_at: "2026-07-11T00:00:00Z".to_owned(),
+            aliases: vec![ResolvedAlias::new("NGC 224", AliasKind::Designation)],
+        };
+
+        let identity = target.to_identity();
+        assert_eq!(identity.simbad_oid, Some(1_575_544));
+        assert_eq!(identity.primary_designation, "M 31");
+        assert_eq!(identity.common_name.as_deref(), Some("Andromeda Galaxy"));
+        assert_eq!(identity.object_type, ObjectType::Galaxy);
+        assert_eq!(identity.otype_raw, "G");
+        assert!((identity.ra_deg - 10.684_708).abs() < f64::EPSILON);
+        assert_eq!(identity.source, TargetSource::Resolved);
+        assert_eq!(identity.aliases, target.aliases);
+    }
+}

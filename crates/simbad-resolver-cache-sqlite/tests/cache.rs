@@ -214,6 +214,20 @@ async fn add_user_alias_then_search_and_remove() {
     assert!(!designation_id_removed);
 }
 
+#[tokio::test]
+async fn add_user_alias_rejects_blank_alias() {
+    let store = SqliteStore::in_memory().await.unwrap();
+    let cache = store.cache();
+    let (id, _) = cache.upsert(&m31(TargetSource::Resolved), &ns()).await.unwrap();
+
+    // A blank/whitespace-only alias normalizes to empty and is not inserted.
+    assert!(!cache.add_user_alias(id, "   ").await.unwrap());
+    assert!(!cache.add_user_alias(id, "").await.unwrap());
+
+    let got = cache.get_by_id(id).await.unwrap().unwrap();
+    assert!(got.aliases.iter().all(|a| a.kind != AliasKind::User));
+}
+
 // ── typeahead search ─────────────────────────────────────────────────────────
 
 #[tokio::test]

@@ -236,6 +236,21 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn fake_resolver_clone_resets_call_counter() {
+        let resolver = FakeResolver::new().with_response("M31", sample_identity());
+        let _ = resolver.resolve("M 31").await;
+        assert_eq!(resolver.call_count(), 1);
+
+        // A clone copies the canned responses but starts its own counter at 0.
+        let cloned = resolver.clone();
+        assert_eq!(cloned.call_count(), 0);
+        let got = cloned.resolve("M 31").await.unwrap();
+        assert_eq!(got.primary_designation, "M 31");
+        assert_eq!(cloned.call_count(), 1);
+        assert_eq!(resolver.call_count(), 1, "clone's calls do not affect the original");
+    }
+
+    #[tokio::test]
     async fn offline_resolver_always_disabled() {
         let resolver = OfflineResolver;
         let err = resolver.resolve("M 31").await.unwrap_err();
