@@ -12,4 +12,5 @@ description = "Static Caldwell C1-C109 to NGC/IC designation map for simbad-reso
 workspace = true
 
 [dependencies]
+simbad-resolver-core = { workspace = true }
 
