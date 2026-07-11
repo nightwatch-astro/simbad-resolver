@@ -1,0 +1,418 @@
+//! Resolved-identity types: [`ObjectType`], [`TargetSource`], [`AliasKind`],
+//! [`ResolvedAlias`], [`ResolvedIdentity`], [`PositionMatch`].
+//!
+//! Ported from astro-plan's `targeting/resolver` (spec 035); see
+//! `specs/001-simbad-target-resolution/data-model.md`.
+
+use serde::{Deserialize, Serialize};
+
+// ── ObjectType ───────────────────────────────────────────────────────────────
+
+/// Closed object-type enum mapped from SIMBAD `otype` (data-model.md
+/// §`ObjectType`).
+///
+/// Serialized as `snake_case`. Any SIMBAD `otype` outside the closed set maps
+/// to [`ObjectType::Other`] (see [`map_otype`]); the raw string is preserved
+/// separately on [`ResolvedIdentity::otype_raw`] for consumers needing finer
+/// types.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ObjectType {
+    /// A galaxy (incl. interacting/active galaxy subtypes).
+    Galaxy,
+    /// A planetary nebula.
+    PlanetaryNebula,
+    /// An emission nebula (H II region, emission object).
+    EmissionNebula,
+    /// A reflection nebula.
+    ReflectionNebula,
+    /// A dark/molecular cloud.
+    DarkNebula,
+    /// An open/galactic cluster.
+    OpenCluster,
+    /// A globular cluster.
+    GlobularCluster,
+    /// A supernova remnant.
+    SupernovaRemnant,
+    /// A cluster of galaxies.
+    GalaxyCluster,
+    /// A double/multiple star.
+    DoubleStar,
+    /// A visual asterism.
+    Asterism,
+    /// Any object type outside the closed set above.
+    Other,
+}
+
+impl ObjectType {
+    /// The `snake_case` wire/DB string for this object type.
+    #[must_use]
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::Galaxy => "galaxy",
+            Self::PlanetaryNebula => "planetary_nebula",
+            Self::EmissionNebula => "emission_nebula",
+            Self::ReflectionNebula => "reflection_nebula",
+            Self::DarkNebula => "dark_nebula",
+            Self::OpenCluster => "open_cluster",
+            Self::GlobularCluster => "globular_cluster",
+            Self::SupernovaRemnant => "supernova_remnant",
+            Self::GalaxyCluster => "galaxy_cluster",
+            Self::DoubleStar => "double_star",
+            Self::Asterism => "asterism",
+            Self::Other => "other",
+        }
+    }
+
+    /// Parse a wire/DB string into an [`ObjectType`]. Unknown strings map to
+    /// [`ObjectType::Other`] (closed enum, forward-compatible read).
+    #[must_use]
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "galaxy" => Self::Galaxy,
+            "planetary_nebula" => Self::PlanetaryNebula,
+            "emission_nebula" => Self::EmissionNebula,
+            "reflection_nebula" => Self::ReflectionNebula,
+            "dark_nebula" => Self::DarkNebula,
+            "open_cluster" => Self::OpenCluster,
+            "globular_cluster" => Self::GlobularCluster,
+            "supernova_remnant" => Self::SupernovaRemnant,
+            "galaxy_cluster" => Self::GalaxyCluster,
+            "double_star" => Self::DoubleStar,
+            "asterism" => Self::Asterism,
+            _ => Self::Other,
+        }
+    }
+}
+
+/// Map a raw SIMBAD `otype` string to the closed [`ObjectType`] enum.
+///
+/// SIMBAD `otype` values are short, case-sensitive condensed codes (e.g. `G`
+/// for galaxy, `PN` for planetary nebula, `HII` for an emission/H II region).
+/// The mapping is total: any unrecognised or unmapped `otype` (including the
+/// empty string) returns [`ObjectType::Other`] so an identity is never
+/// dropped for lack of a type.
+///
+/// The recognised codes follow the SIMBAD object-type vocabulary
+/// (<https://simbad.cds.unistra.fr/guide/otypes.htx>); the long-form labels
+/// SIMBAD also emits are accepted as aliases for robustness.
+#[must_use]
+pub fn map_otype(otype: &str) -> ObjectType {
+    match otype.trim() {
+        // Galaxies (incl. interacting/active galaxy subtypes).
+        "G" | "GiC" | "GiG" | "GiP" | "IG" | "PaG" | "AGN" | "SBG" | "rG" | "LSB" | "AG?"
+        | "EmG" | "BiC" | "H2G" | "Sy1" | "Sy2" | "SyG" | "Galaxy" => ObjectType::Galaxy,
+        // Planetary nebulae.
+        "PN" | "PN?" | "pA*" | "PlanetaryNebula" => ObjectType::PlanetaryNebula,
+        // Emission nebulae (H II regions, emission objects).
+        "HII" | "EmO" | "ISM" | "RNe?" | "EmissionNebula" => ObjectType::EmissionNebula,
+        // Reflection nebulae.
+        "RNe" | "ReflectionNebula" => ObjectType::ReflectionNebula,
+        // Dark / molecular clouds.
+        "DNe" | "MoC" | "glb" | "cor" | "GNe" | "DarkNebula" => ObjectType::DarkNebula,
+        // Open / galactic clusters.
+        "OpC" | "Cl*" | "As*" | "OpenCluster" => ObjectType::OpenCluster,
+        // Globular clusters.
+        "GlC" | "GlobularCluster" => ObjectType::GlobularCluster,
+        // Supernova remnants.
+        "SNR" | "SNR?" | "SuperNovaRemnant" | "SupernovaRemnant" => ObjectType::SupernovaRemnant,
+        // Clusters of galaxies.
+        "ClG" | "GrG" | "CGG" | "SCG" | "GalaxyCluster" => ObjectType::GalaxyCluster,
+        // Double / multiple stars.
+        "**" | "**?" | "EB*" | "SB*" | "DoubleStar" => ObjectType::DoubleStar,
+        // Asterisms (note: SIMBAD uses `As*` for stellar associations; the
+        // visual-asterism sense is matched by the long-form label only).
+        "Asterism" => ObjectType::Asterism,
+        _ => ObjectType::Other,
+    }
+}
+
+// ── TargetSource ─────────────────────────────────────────────────────────────
+
+/// Provenance of a resolved identity (data-model.md §`TargetSource`).
+///
+/// The `UserOverride` variant serializes with the hyphenated `user-override`
+/// wire/DB value.
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TargetSource {
+    /// Loaded from a bundled seed index at first run.
+    Seed,
+    /// Resolved live from SIMBAD.
+    Resolved,
+    /// A manual user correction; wins over `seed`/`resolved`.
+    #[serde(rename = "user-override")]
+    UserOverride,
+}
+
+impl TargetSource {
+    /// The wire/DB string for this source (`UserOverride` is the hyphenated
+    /// `user-override`).
+    #[must_use]
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::Seed => "seed",
+            Self::Resolved => "resolved",
+            Self::UserOverride => "user-override",
+        }
+    }
+
+    /// Parse a wire/DB string into a [`TargetSource`]. Returns `None` for an
+    /// unrecognised value.
+    #[must_use]
+    pub fn from_wire(s: &str) -> Option<Self> {
+        match s {
+            "seed" => Some(Self::Seed),
+            "resolved" => Some(Self::Resolved),
+            "user-override" => Some(Self::UserOverride),
+            _ => None,
+        }
+    }
+
+    /// Source precedence rank for conflicting writes: higher wins.
+    /// `user-override` (2) > `resolved` (1) > `seed` (0).
+    #[must_use]
+    pub fn precedence(self) -> u8 {
+        match self {
+            Self::Seed => 0,
+            Self::Resolved => 1,
+            Self::UserOverride => 2,
+        }
+    }
+
+    /// Whether a write with `self` as the incoming source may overwrite an
+    /// existing row whose source is `existing`.
+    ///
+    /// A `user-override` row is sticky: a later `resolved`/`seed` result MUST
+    /// NOT overwrite it. An equal-or-higher-precedence incoming source wins
+    /// (re-resolving refreshes a `resolved` row; an override always wins).
+    #[must_use]
+    pub fn may_overwrite(self, existing: Self) -> bool {
+        self.precedence() >= existing.precedence()
+    }
+}
+
+// ── AliasKind / ResolvedAlias ─────────────────────────────────────────────────
+
+/// The kind of an alias attached to a resolved identity (data-model.md
+/// §`TargetAlias.kind`).
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AliasKind {
+    /// A catalog designation (e.g. `M 31`, `NGC 224`).
+    Designation,
+    /// A SIMBAD `NAME …` curated common name (e.g. `Andromeda Galaxy`).
+    CommonName,
+    /// A user-added alias.
+    User,
+}
+
+impl AliasKind {
+    /// The wire/DB string (matches the `target_alias.kind` CHECK constraint).
+    #[must_use]
+    pub fn as_wire(self) -> &'static str {
+        match self {
+            Self::Designation => "designation",
+            Self::CommonName => "common_name",
+            Self::User => "user",
+        }
+    }
+
+    /// Parse a wire/DB string into an [`AliasKind`]; unknown → `Designation`.
+    #[must_use]
+    pub fn from_wire(s: &str) -> Self {
+        match s {
+            "common_name" => Self::CommonName,
+            "user" => Self::User,
+            _ => Self::Designation,
+        }
+    }
+}
+
+/// One alternate designation/name for a resolved identity (data-model.md
+/// §`TargetAlias`). The `normalized` form is the typeahead match surface.
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub struct ResolvedAlias {
+    /// Verbatim designation or common name (e.g. `M 31`, `Andromeda Galaxy`).
+    pub alias: String,
+    /// Normalized form for matching ([`crate::normalize::normalize`]).
+    pub normalized: String,
+    /// Whether this alias is a designation or a curated common name.
+    pub kind: AliasKind,
+}
+
+impl ResolvedAlias {
+    /// Build a [`ResolvedAlias`], computing the normalized form from `alias`.
+    #[must_use]
+    pub fn new(alias: impl Into<String>, kind: AliasKind) -> Self {
+        let alias = alias.into();
+        let normalized = crate::normalize::normalize(&alias);
+        Self { alias, normalized, kind }
+    }
+}
+
+// ── ResolvedIdentity / PositionMatch ──────────────────────────────────────────
+
+/// A fully resolved canonical target identity returned by a [`crate::Resolver`].
+///
+/// Coordinates are ICRS J2000 decimal degrees and are never fabricated: a
+/// resolver that cannot determine a real position returns
+/// [`crate::ResolveError::NotFound`] instead of inventing one.
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct ResolvedIdentity {
+    /// SIMBAD physical-object id (the dedup key) when resolved online; `None`
+    /// for seed/override-only entries until enriched.
+    pub simbad_oid: Option<i64>,
+    /// Canonical display designation.
+    pub primary_designation: String,
+    /// Curated common name (SIMBAD `NAME …`) when one exists.
+    pub common_name: Option<String>,
+    /// Closed object-type enum from the SIMBAD `otype` mapping ([`map_otype`]).
+    pub object_type: ObjectType,
+    /// Raw SIMBAD `otype` string, preserved alongside the mapped
+    /// [`Self::object_type`] for consumers needing finer-grained types.
+    pub otype_raw: String,
+    /// ICRS J2000 right ascension in decimal degrees, `[0, 360)`.
+    pub ra_deg: f64,
+    /// ICRS J2000 declination in decimal degrees, `[-90, 90]`.
+    pub dec_deg: f64,
+    /// All designations + common names for this object (the typeahead surface).
+    pub aliases: Vec<ResolvedAlias>,
+    /// Provenance of this identity.
+    pub source: TargetSource,
+}
+
+/// One result of a position (cone-search) resolution (data-model.md
+/// §`PositionMatch`).
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct PositionMatch {
+    /// The matched identity.
+    pub identity: ResolvedIdentity,
+    /// Angular separation from the query position, in degrees.
+    pub separation_deg: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // ── map_otype ──────────────────────────────────────────────────────────
+
+    #[test]
+    fn map_otype_maps_known_codes() {
+        assert_eq!(map_otype("G"), ObjectType::Galaxy);
+        assert_eq!(map_otype("PN"), ObjectType::PlanetaryNebula);
+        assert_eq!(map_otype("HII"), ObjectType::EmissionNebula);
+        assert_eq!(map_otype("RNe"), ObjectType::ReflectionNebula);
+        assert_eq!(map_otype("DNe"), ObjectType::DarkNebula);
+        assert_eq!(map_otype("OpC"), ObjectType::OpenCluster);
+        assert_eq!(map_otype("GlC"), ObjectType::GlobularCluster);
+        assert_eq!(map_otype("SNR"), ObjectType::SupernovaRemnant);
+        assert_eq!(map_otype("ClG"), ObjectType::GalaxyCluster);
+        assert_eq!(map_otype("**"), ObjectType::DoubleStar);
+        assert_eq!(map_otype("Asterism"), ObjectType::Asterism);
+    }
+
+    #[test]
+    fn map_otype_unknown_is_other() {
+        assert_eq!(map_otype("ZZZ"), ObjectType::Other);
+        assert_eq!(map_otype(""), ObjectType::Other);
+        assert_eq!(map_otype("Star"), ObjectType::Other);
+    }
+
+    #[test]
+    fn map_otype_trims_whitespace() {
+        assert_eq!(map_otype("  G  "), ObjectType::Galaxy);
+    }
+
+    #[test]
+    fn object_type_serializes_snake_case() {
+        assert_eq!(
+            serde_json::to_string(&ObjectType::PlanetaryNebula).unwrap(),
+            "\"planetary_nebula\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ObjectType::GalaxyCluster).unwrap(),
+            "\"galaxy_cluster\""
+        );
+        assert_eq!(serde_json::to_string(&ObjectType::Other).unwrap(), "\"other\"");
+    }
+
+    #[test]
+    fn object_type_wire_round_trips() {
+        for ot in [
+            ObjectType::Galaxy,
+            ObjectType::PlanetaryNebula,
+            ObjectType::EmissionNebula,
+            ObjectType::ReflectionNebula,
+            ObjectType::DarkNebula,
+            ObjectType::OpenCluster,
+            ObjectType::GlobularCluster,
+            ObjectType::SupernovaRemnant,
+            ObjectType::GalaxyCluster,
+            ObjectType::DoubleStar,
+            ObjectType::Asterism,
+            ObjectType::Other,
+        ] {
+            assert_eq!(ObjectType::from_wire(ot.as_wire()), ot);
+        }
+        assert_eq!(ObjectType::from_wire("bogus"), ObjectType::Other);
+    }
+
+    // ── TargetSource ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn target_source_user_override_is_hyphenated() {
+        assert_eq!(
+            serde_json::to_string(&TargetSource::UserOverride).unwrap(),
+            "\"user-override\""
+        );
+        assert_eq!(serde_json::to_string(&TargetSource::Seed).unwrap(), "\"seed\"");
+        assert_eq!(serde_json::to_string(&TargetSource::Resolved).unwrap(), "\"resolved\"");
+        assert_eq!(
+            serde_json::from_str::<TargetSource>("\"user-override\"").unwrap(),
+            TargetSource::UserOverride
+        );
+    }
+
+    #[test]
+    fn target_source_wire_round_trips() {
+        for src in [TargetSource::Seed, TargetSource::Resolved, TargetSource::UserOverride] {
+            assert_eq!(TargetSource::from_wire(src.as_wire()), Some(src));
+        }
+        assert_eq!(TargetSource::from_wire("bogus"), None);
+    }
+
+    #[test]
+    fn target_source_precedence_and_overwrite() {
+        assert!(TargetSource::Seed.precedence() < TargetSource::Resolved.precedence());
+        assert!(TargetSource::Resolved.precedence() < TargetSource::UserOverride.precedence());
+
+        // Equal-or-higher precedence may overwrite.
+        assert!(TargetSource::Resolved.may_overwrite(TargetSource::Seed));
+        assert!(TargetSource::Resolved.may_overwrite(TargetSource::Resolved));
+        assert!(TargetSource::UserOverride.may_overwrite(TargetSource::Resolved));
+
+        // A user-override row is sticky: lower-precedence incoming sources
+        // must not overwrite it.
+        assert!(!TargetSource::Seed.may_overwrite(TargetSource::UserOverride));
+        assert!(!TargetSource::Resolved.may_overwrite(TargetSource::UserOverride));
+    }
+
+    // ── AliasKind / ResolvedAlias ──────────────────────────────────────────
+
+    #[test]
+    fn alias_kind_wire_round_trips() {
+        for kind in [AliasKind::Designation, AliasKind::CommonName, AliasKind::User] {
+            assert_eq!(AliasKind::from_wire(kind.as_wire()), kind);
+        }
+        assert_eq!(AliasKind::from_wire("bogus"), AliasKind::Designation);
+    }
+
+    #[test]
+    fn resolved_alias_computes_normalized_form() {
+        let alias = ResolvedAlias::new("M31", AliasKind::Designation);
+        assert_eq!(alias.alias, "M31");
+        assert_eq!(alias.normalized, "m 31");
+    }
+}

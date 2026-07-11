@@ -1,7 +1,33 @@
-//! Pure core types, normalization, identity, and the Resolver trait for simbad-resolver.
+//! Pure, sync foundation crate for `simbad-resolver`.
 //!
-//! Part of the `simbad-resolver` workspace. Implemented per
-//! `specs/001-simbad-target-resolution/`.
+//! Holds the resolved-identity types ([`ObjectType`], [`TargetSource`],
+//! [`AliasKind`], [`ResolvedAlias`], [`ResolvedIdentity`], [`PositionMatch`]),
+//! the typed [`ResolveError`], the [`normalize`]/[`identity`] pipelines, the
+//! [`wire`] TSV-parsing helpers, and the [`Resolver`]/[`PositionResolver`]
+//! seam (plus [`OfflineResolver`] and, behind `feature = "test-fixture"`,
+//! [`FakeResolver`]).
+//!
+//! This crate MUST NOT depend on an async runtime or an HTTP/SQL client
+//! (no `tokio`, `reqwest`, or `sqlx`): every network-/DB-backed resolver
+//! implementation lives in a downstream crate (`simbad-resolver-tap`,
+//! `-sesame`, `-cache-sqlite`) that depends on this one, never the reverse.
+//! See `specs/001-simbad-target-resolution/data-model.md` and
+//! `contracts/resolver.md`.
 #![forbid(unsafe_code)]
 
-// implemented per spec
+pub mod config;
+pub mod error;
+pub mod identity;
+pub mod normalize;
+pub mod resolver;
+pub mod types;
+pub mod wire;
+
+pub use config::SimbadConfig;
+pub use error::ResolveError;
+#[cfg(any(test, feature = "test-fixture"))]
+pub use resolver::FakeResolver;
+pub use resolver::{OfflineResolver, PositionResolver, Resolver};
+pub use types::{
+    map_otype, AliasKind, ObjectType, PositionMatch, ResolvedAlias, ResolvedIdentity, TargetSource,
+};

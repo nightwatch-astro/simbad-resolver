@@ -11,9 +11,12 @@ description = "Pure core types, normalization, identity, and the Resolver trait 
 [lints]
 workspace = true
 
+[features]
+# In-memory FakeResolver test double, exposed to other crates' tests/benches.
+test-fixture = []
+
 [dependencies]
 serde = { workspace = true }
-serde_json = { workspace = true }
 thiserror = { workspace = true }
 uuid = { workspace = true }
 unicode-normalization = { workspace = true }
