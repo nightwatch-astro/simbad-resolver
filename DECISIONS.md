@@ -17,8 +17,17 @@ the maintainer's input. Newest at the top of each section.
 
 - **MSRV** assumed `1.82`. Adjust if you target older.
 - **Cone-search radius units**: degrees (matches ICRS decimal-degree convention).
-- **Sesame endpoint/format**: using the CDS Sesame `sim-nph` XML output; parser
-  is defensive (may need a fixture refresh if CDS changes the format).
+- **Sesame XML format (NEEDS LIVE VERIFICATION)**: `simbad-resolver-sesame`
+  parses a **hand-built** `-oxp` (`SNV`) fixture based on the documented schema,
+  NOT a byte-for-byte live capture. Endpoint
+  `https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?<name>`. The parser is
+  tolerant (falls back to scanning the whole doc), but if live Sesame differs
+  (tag casing, attribute-based fields, nesting) the fixture + parser in
+  `src/parse.rs` need a refresh. **Action**: run the ignored live test
+  (`cargo test -p simbad-resolver-sesame -- --ignored`) on a networked machine to
+  confirm/refresh. TAP live tests likewise (`-p simbad-resolver-tap`).
+- **Sesame `common_name`** is always `None` (Sesame has no SIMBAD-`NAME` curated
+  analog); enrichment via a supplied TAP resolver fills type/aliases when wanted.
 
 ## Autonomous decisions
 
