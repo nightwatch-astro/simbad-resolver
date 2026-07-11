@@ -1,93 +1,102 @@
 # simbad-resolver
 
-Generic, embeddable **SIMBAD astronomical target resolver** for Rust.
+[![CI](https://github.com/srobroek/simbad-resolver/actions/workflows/ci.yml/badge.svg)](https://github.com/srobroek/simbad-resolver/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/simbad-resolver.svg)](https://crates.io/crates/simbad-resolver)
+[![docs.rs](https://img.shields.io/docsrs/simbad-resolver)](https://docs.rs/simbad-resolver)
 
-`simbad-resolver` turns an astronomical **name or catalog designation** (`M31`,
-`NGC 224`, `Andromeda Galaxy`, `C 14`) — or a **sky position** — into a single
-canonical target **identity**: ICRS J2000 coordinates, a closed object-type
-classification, the full alias/designation set, and a stable id. It resolves
-on-demand against SIMBAD and never fabricates coordinates.
+A Rust library for resolving astronomical object names, catalog designations,
+and sky positions to canonical target identities using SIMBAD.
 
-> Status: **early scaffold.** The architecture and requirements are captured in
-> [`specs/`](specs/); crates are implemented incrementally against that spec.
+Given an input such as `M31`, `NGC 224`, `Andromeda Galaxy`, `C 14`, or a sky
+position, `simbad-resolver` queries SIMBAD and returns a single canonical
+identity: a stable id, ICRS J2000 coordinates, an object-type classification,
+the object's alias set, and the provenance of the record. Resolved identities
+are stored in a pluggable cache, so repeated lookups are served locally instead
+of re-querying SIMBAD, and an async batch resolver processes many names against
+a durable queue.
 
-## Why
+## Documentation
 
-Extracted and generalized from the target-resolution subsystem of an astronomy
-imaging app, decoupled from that app's database schema, identity namespace, and
-branding so it can be embedded in any Rust project that needs to answer *"what
-astronomical object is this?"*.
+Full API documentation is generated from the source and published on docs.rs:
 
-## Design at a glance
+- **[docs.rs/simbad-resolver](https://docs.rs/simbad-resolver)** — the facade
+  crate and its re-exports (start here).
+- Each crate is documented individually; links to the sub-crates appear in the
+  facade's documentation.
 
-- **Two first-class resolvers.** `simbad-resolver-tap` (SIMBAD TAP/ADQL —
-  precise, structured, cone-search) and `simbad-resolver-sesame` (SIMBAD Sesame
-  — broader name coverage aggregating SIMBAD/NED/VizieR). Pick per use case.
-- **Pluggable cache.** A `Cache` trait with `-cache-memory` (dashmap) and
-  `-cache-sqlite` (sqlx) implementations; bring your own backend.
-- **Never fabricate.** Unknown/ambiguous/offline → an explicit unresolved
-  outcome, never a guessed coordinate.
-- **Configurable identity.** The stable-id UUID namespace and the HTTP
-  User-Agent are caller-supplied, not baked in.
-- **Async, polite.** Cache-first single resolve plus an async batch resolver
-  with transient-vs-miss retry semantics for resolving many names without
-  hammering CDS.
+To build the documentation locally:
 
-See [`docs/adr/0001-stack-and-architecture.md`](docs/adr/0001-stack-and-architecture.md)
-for the crate split and rationale.
+```bash
+cargo doc --workspace --all-features --open
+```
 
 ## Workspace crates
 
 | Crate | Role |
 |---|---|
-| `simbad-resolver` | **Main facade** — orchestration (cache-first, sticky override, async batch) + re-exports |
-| `simbad-resolver-core` | Pure types (`ObjectType`, `TargetSource`, `ResolvedIdentity`), normalization, identity, the `Resolver` trait |
-| `simbad-resolver-tap` | SIMBAD TAP client — resolve-by-name + cone-search |
-| `simbad-resolver-sesame` | SIMBAD Sesame client — resolve-by-name |
-| `simbad-resolver-cache` | The `Cache` trait (pluggable interface) |
-| `simbad-resolver-cache-memory` | In-memory `Cache` impl (dashmap) |
-| `simbad-resolver-cache-sqlite` | SQLite `Cache` impl (sqlx), owns its migrations |
-| `simbad-resolver-caldwell` | Caldwell C1–C109 → NGC/IC designation map |
+| `simbad-resolver` | Facade: cache-first resolve, user-override precedence, async batch resolution, feature-gated re-exports of the crates below |
+| `simbad-resolver-core` | Core types (`ObjectType`, `TargetSource`, `ResolvedIdentity`), query normalization, id derivation, and the `Resolver` trait |
+| `simbad-resolver-tap` | SIMBAD TAP/ADQL client: resolve by name and cone search by position |
+| `simbad-resolver-sesame` | CDS Sesame client: resolve by name (SIMBAD/NED/VizieR aggregation) |
+| `simbad-resolver-cache` | The `Cache` and `Queue` traits |
+| `simbad-resolver-cache-memory` | In-memory `Cache`/`Queue` implementation |
+| `simbad-resolver-cache-sqlite` | SQLite `Cache`/`Queue` implementation |
+| `simbad-resolver-caldwell` | Caldwell (C1–C109) to NGC/IC designation map |
 
-## Ecosystem
+## Resolver backends
 
-`simbad-resolver` is one crate in a small, composable ecosystem. It is
-**upstream** — it produces objects; it never consumes them.
+- **TAP** (`simbad-resolver-tap`) queries the SIMBAD TAP service with ADQL. It
+  returns SIMBAD object ids, object types, the full alias set, and supports cone
+  search by position.
+- **Sesame** (`simbad-resolver-sesame`) queries the CDS Sesame name resolver,
+  which aggregates SIMBAD, NED, and VizieR. It resolves a broader range of names
+  but returns coordinates and a primary designation only; object type and
+  aliases can be filled in by supplying a TAP resolver as an enricher.
 
+## Cache backends
+
+The `Cache` trait is a durable store of resolved identities, keyed for
+deduplication and typeahead search. Two implementations are provided —
+in-memory (`simbad-resolver-cache-memory`) and SQLite
+(`simbad-resolver-cache-sqlite`) — and callers can supply their own.
+
+## Usage
+
+```rust
+use simbad_resolver::{Resolution, ResolverConfig, SimbadResolver};
+use simbad_resolver::memory::MemoryCache;
+use simbad_resolver_tap::SimbadTapResolver;
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let resolver = SimbadResolver::new(
+    SimbadTapResolver::with_defaults()?,
+    MemoryCache::default(),
+    ResolverConfig::new("your.namespace"),
+);
+
+match resolver.resolve("M31").await? {
+    Resolution::Resolved(target) => {
+        println!("{} at ({}, {})", target.primary_designation, target.ra_deg, target.dec_deg);
+    }
+    Resolution::Unresolved { reason, .. } => println!("unresolved: {reason:?}"),
+}
+# Ok(())
+# }
 ```
-   name / browse catalog                    frame pointing + FOV
-           │                                        │
-           ▼                                        ▼
-  ┌────────────────────┐   {id, ra, dec}   ┌────────────────────┐
-  │   simbad-resolver   │ ────────────────▶ │    target-match     │
-  │ name → identity,    │   candidates      │ rank by angular sep,│
-  │ SIMBAD TAP+Sesame,  │                   │ FOV/radius geometry │
-  │ pluggable cache     │                   │ → nearest in-frame  │
-  └────────────────────┘                   └────────────────────┘
-           └──────────── both speak astro-angle ──────────────┘
+
+Selecting backends via crate features:
+
+```toml
+[dependencies]
+simbad-resolver = { version = "0.1", features = ["tap", "sqlite"] }
 ```
-
-- **[`astro-angle`](https://github.com/srobroek/astro-angle)** — shared
-  coordinate/angle primitives (`Equatorial`, angles, sexagesimal parse/format).
-  `simbad-resolver` adopts these as its coordinate type; until `astro-angle`
-  lands, coordinates are plain decimal degrees behind a conversion seam.
-- **[`target-match`](https://github.com/srobroek/target-match)** (formerly
-  `astro-target-id`) — the **downstream** consumer. Given a frame pointing, a
-  field-of-view/radius, and a list of candidate positions, it ranks them by
-  angular separation and returns those that fall on the frame. It takes a
-  radius in degrees; the optics→FOV→radius geometry lives there, not here. Our
-  cone-search and `list`/search output feed straight into it.
-
-The direction of flow is fixed: `simbad-resolver` answers *"what is this
-name?"* and owns catalog identity; `target-match` answers *"which of these did
-this frame capture?"*. Objects are never passed **into** the resolver.
 
 ## Attribution
 
-This library queries **SIMBAD** operated at CDS, Strasbourg, France. Consumers
-displaying resolved data should credit CDS per its usage norms and supply an
-identifying `User-Agent`.
+This library queries SIMBAD, operated at CDS, Strasbourg, France. Applications
+that display resolved data should credit CDS and send an identifying
+`User-Agent` header (configurable via `SimbadConfig`).
 
 ## License
 
-Licensed under the [Apache License, Version 2.0](LICENSE).
+Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
