@@ -1,7 +1,7 @@
 //! Caller-owned resolver configuration.
 //!
 //! Settings are supplied by the caller at construction; the library persists
-//! none of them (spec clarification 2026-07-11).
+//! none of them.
 
 use uuid::Uuid;
 

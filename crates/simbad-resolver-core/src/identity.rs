@@ -1,8 +1,8 @@
 //! Deterministic `UUIDv5` derivation for a resolved target's stable id.
 //!
-//! The derivation is caller-namespaced (unlike astro-plan's hardcoded
-//! `"astro-plan.targets"` seed — this crate is embedded by many consumers,
-//! each of which must own its own namespace to avoid id collisions):
+//! The derivation is caller-namespaced rather than using a single fixed seed:
+//! this crate is embedded by many consumers, each of which must own its own
+//! namespace to avoid id collisions:
 //!
 //! ```text
 //! ns        = UUIDv5(namespace=dns, name=<caller-supplied seed>)
@@ -25,11 +25,11 @@ pub fn namespace(seed: &str) -> Uuid {
 }
 
 /// Derive the deterministic `UUIDv5` target id for a canonical `designation`
-/// within namespace `ns` (data-model.md §Identity derivation).
+/// within namespace `ns`.
 ///
 /// The `designation` should be the precedence-winning canonical designation
 /// for the resolved object (dedup by `simbad_oid` when available; this is the
-/// fallback key otherwise — data-model.md FR-005).
+/// fallback key otherwise).
 #[must_use]
 pub fn target_id_from_designation(ns: &Uuid, designation: &str) -> Uuid {
     Uuid::new_v5(ns, designation.as_bytes())

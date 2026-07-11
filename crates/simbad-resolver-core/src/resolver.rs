@@ -2,7 +2,7 @@
 //! [`OfflineResolver`], and (test-only) [`FakeResolver`].
 //!
 //! Object-safe via `async-trait` so a boxed `dyn Resolver` can be shared
-//! across an async runtime (contracts/resolver.md).
+//! across an async runtime.
 
 use crate::error::ResolveError;
 use crate::types::{PositionMatch, ResolvedIdentity};

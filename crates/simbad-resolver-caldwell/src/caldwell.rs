@@ -1,4 +1,4 @@
-//! Static Caldwell → NGC/IC (or other) designation map (spec 001, FR-015).
+//! Static Caldwell → NGC/IC (or other) designation map.
 //!
 //! Caldwell is **not** a SIMBAD designation: SIMBAD does not recognise the
 //! `C…` prefix as an identifier. To resolve a Caldwell query the caller
@@ -24,7 +24,7 @@ use simbad_resolver_core::normalize::normalize;
 ///
 /// `None` entries are Caldwell objects with no single SIMBAD-resolvable catalog
 /// designation (e.g. the Coalsack); callers leave those unresolved rather than
-/// fabricating one (FR-015).
+/// fabricating one.
 const CALDWELL: &[(u16, Option<&str>)] = &[
     (1, Some("NGC 188")),
     (2, Some("NGC 40")),

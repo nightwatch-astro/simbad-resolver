@@ -4,9 +4,7 @@
 //! `migrations/0001_init.sql` schema and hand out [`SqliteCache`] /
 //! [`SqliteQueue`] wrappers sharing one `sqlx::SqlitePool`. Both use runtime
 //! `sqlx::query`/`query_as` (no compile-time-checked macros, which would need
-//! `DATABASE_URL` at build time) per
-//! `specs/001-simbad-target-resolution/data-model.md` and the `cache`/`queue`
-//! contracts.
+//! `DATABASE_URL` at build time).
 #![forbid(unsafe_code)]
 
 mod cache;

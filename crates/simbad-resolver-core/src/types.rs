@@ -1,15 +1,11 @@
 //! Resolved-identity types: [`ObjectType`], [`TargetSource`], [`AliasKind`],
 //! [`ResolvedAlias`], [`ResolvedIdentity`], [`PositionMatch`].
-//!
-//! Ported from astro-plan's `targeting/resolver` (spec 035); see
-//! `specs/001-simbad-target-resolution/data-model.md`.
 
 use serde::{Deserialize, Serialize};
 
 // ── ObjectType ───────────────────────────────────────────────────────────────
 
-/// Closed object-type enum mapped from SIMBAD `otype` (data-model.md
-/// §`ObjectType`).
+/// Closed object-type enum mapped from SIMBAD `otype`.
 ///
 /// Serialized as `snake_case`. Any SIMBAD `otype` outside the closed set maps
 /// to [`ObjectType::Other`] (see [`map_otype`]); the raw string is preserved
@@ -129,7 +125,7 @@ pub fn map_otype(otype: &str) -> ObjectType {
 
 // ── TargetSource ─────────────────────────────────────────────────────────────
 
-/// Provenance of a resolved identity (data-model.md §`TargetSource`).
+/// Provenance of a resolved identity.
 ///
 /// The `UserOverride` variant serializes with the hyphenated `user-override`
 /// wire/DB value.
@@ -194,8 +190,7 @@ impl TargetSource {
 
 // ── AliasKind / ResolvedAlias ─────────────────────────────────────────────────
 
-/// The kind of an alias attached to a resolved identity (data-model.md
-/// §`TargetAlias.kind`).
+/// The kind of an alias attached to a resolved identity.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AliasKind {
@@ -229,8 +224,8 @@ impl AliasKind {
     }
 }
 
-/// One alternate designation/name for a resolved identity (data-model.md
-/// §`TargetAlias`). The `normalized` form is the typeahead match surface.
+/// One alternate designation/name for a resolved identity. The `normalized`
+/// form is the typeahead match surface.
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 pub struct ResolvedAlias {
     /// Verbatim designation or common name (e.g. `M 31`, `Andromeda Galaxy`).
@@ -282,8 +277,7 @@ pub struct ResolvedIdentity {
     pub source: TargetSource,
 }
 
-/// One result of a position (cone-search) resolution (data-model.md
-/// §`PositionMatch`).
+/// One result of a position (cone-search) resolution.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PositionMatch {
     /// The matched identity.

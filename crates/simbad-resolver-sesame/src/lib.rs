@@ -9,8 +9,7 @@
 //! trait object (typically the TAP resolver) — this crate has no build
 //! dependency on `-tap`.
 //!
-//! Part of the `simbad-resolver` workspace. Implemented per
-//! `specs/001-simbad-target-resolution/`.
+//! Part of the `simbad-resolver` workspace.
 #![forbid(unsafe_code)]
 
 mod config;
