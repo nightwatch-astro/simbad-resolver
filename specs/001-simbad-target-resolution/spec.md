@@ -14,6 +14,14 @@
 
 The library is **upstream** in its ecosystem: it answers *"what is this object?"* and produces identities. It is embeddable in any Rust project (planners, ingest pipelines, plate-solve post-processing, catalog browsers) that needs authoritative object identity without owning SIMBAD querying, deduplication, and caching itself.
 
+## Clarifications
+
+### Session 2026-07-11
+
+- Q: Are resolver settings (online-enabled, endpoint, timeout, User-Agent) caller-owned config or persisted like the origin app? → A: **Caller-owned constructor config**; the library does not persist settings and the durable store has no settings table.
+- Q: How does the Sesame (broad-coverage) resolver relate to the TAP (precise) resolver, given Sesame's coarser raw output? → A: **Standalone by default, with optional enrichment** — the Sesame resolver may enrich its result via a caller-supplied resolver, but does not depend on the TAP resolver.
+- Q: How durable is the async batch/pending queue? → A: **A pluggable `Queue` abstraction**, with both an in-memory implementation and a durable (cache-backed) implementation shipped — mirroring the cache, which ships a memory backend and a durable (SQLite) backend.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Resolve a name to a canonical identity (Priority: P1)
@@ -142,7 +150,7 @@ A developer embeds the library into an existing application and needs stable ids
 ### Functional Requirements
 
 - **FR-001**: The system MUST resolve a designation or common name to exactly one canonical identity carrying ICRS J2000 coordinates, an object-type classification, the full alias/designation set, a curated common name when one exists, and a stable id.
-- **FR-002**: The system MUST offer more than one interchangeable resolution backend behind a single resolver interface — a precise/structured resolver and a broad-coverage aggregating resolver — selectable by the caller, with documentation of when each is preferable.
+- **FR-002**: The system MUST offer more than one interchangeable resolution backend behind a single resolver interface — a precise/structured resolver and a broad-coverage aggregating resolver — selectable by the caller, with documentation of when each is preferable. The broad-coverage resolver MAY optionally enrich its (potentially coarser) result via a caller-supplied resolver, but MUST NOT hard-depend on the precise resolver.
 - **FR-003**: The system MUST consult the cache before the network, persist every resolution, and never re-query an already-cached object (resolve-at-most-once).
 - **FR-004**: The system MUST provide the cache as a pluggable abstraction with at least an in-memory implementation and a durable local implementation, and MUST allow a caller-supplied implementation, without changes to resolve/orchestration logic.
 - **FR-005**: The system MUST deduplicate all aliases of one physical object onto a single canonical identity (by the upstream physical-object identifier, with a designation-derived deterministic id as fallback when that identifier is unknown); it MUST NOT split one object across aliases or catalogs.
@@ -151,10 +159,10 @@ A developer embeds the library into an existing application and needs stable ids
 - **FR-008**: The system MUST NOT fabricate coordinates or identity: an unknown query yields not-found, a query matching several distinct physical objects yields ambiguous, and an offline/timeout/disabled condition degrades to the cache with an explicit offline/unresolved outcome.
 - **FR-009**: The system MUST resolve a sky position with a search radius to the nearest known object(s), each with its angular separation, ordered nearest-first.
 - **FR-010**: The system MUST provide a local, network-free typeahead search over cached aliases, ranked exact > prefix > substring, deduplicated to one entry per target, and capped to a caller-supplied limit.
-- **FR-011**: The system MUST provide an asynchronous batch resolver that accepts identifiers keyed by opaque caller ids, drains them cache-first then online within a bounded concurrency, keeps **transient** failures pending for retry without consuming an attempt budget, and marks **content** misses unresolved.
+- **FR-011**: The system MUST provide an asynchronous batch resolver that accepts identifiers keyed by opaque caller ids, drains them cache-first then online within a bounded concurrency, keeps **transient** failures pending for retry without consuming an attempt budget, and marks **content** misses unresolved. The pending items MUST be held behind a pluggable **queue abstraction**; the library MUST ship both an in-memory queue and a durable (cache-backed) queue whose pending items survive a restart.
 - **FR-012**: The system MUST support disabling online resolution, in which case only cache/seed lookups are performed.
 - **FR-013**: The system MUST derive stable ids from a **caller-configurable** identity namespace so that ids are deterministic and can match a caller's existing ids for the same designation.
-- **FR-014**: The system MUST expose caller-configurable network etiquette — endpoint, request timeout, and an identifying User-Agent — with neutral, identifying defaults.
+- **FR-014**: The system MUST expose caller-configurable network etiquette — endpoint, request timeout, and an identifying User-Agent — with neutral, identifying defaults. These, together with the online-resolution toggle (FR-012), are caller-owned constructor configuration; the library MUST NOT persist them.
 - **FR-015**: The system MUST translate Caldwell designations to their standard resolvable catalog designation, resolve that, and bind the original Caldwell designation as an alias; Caldwell entries with no single resolvable designation yield not-found.
 - **FR-016**: The system MUST map upstream object-type codes to a closed, documented classification via a total mapping (unknown/empty → a catch-all `other`) while preserving the raw upstream type string.
 - **FR-017**: The system MUST treat all upstream responses defensively: bound response body size, detect error responses even when delivered with a success status, and normalize whitespace-padded/quoted identifiers before use.
@@ -167,9 +175,11 @@ A developer embeds the library into an existing application and needs stable ids
 - **Canonical Target**: one physical astronomical object — its stable id, the upstream physical-object identifier (deduplication key when known), a primary/display designation, an object-type classification, ICRS J2000 coordinates, a provenance/source, and a resolved-at timestamp.
 - **Target Alias**: one alternate designation or curated common name attached to a canonical target — the verbatim form, a normalized matching form, and a kind (designation, common name, or user-added).
 - **Resolved Identity**: the value a resolver returns before persistence — the canonical target's fields plus its full alias set — never carrying a fabricated coordinate.
-- **Resolver Settings**: the caller-tunable configuration — whether online resolution is enabled, the upstream endpoint, and the request timeout.
-- **Resolver (abstraction)**: the interchangeable resolution backend; concrete backends are a precise/structured resolver, a broad-coverage aggregating resolver, an always-offline resolver, and a test double.
-- **Cache (abstraction)**: the interchangeable identity store supporting get-by-id/physical-id/normalized-alias, ranked search, precedence-aware upsert with deduplication, alias add/remove, and override set/clear.
+- **Resolver Configuration** *(caller-owned, not persisted)*: whether online resolution is enabled, the upstream endpoint, the request timeout, and the identifying User-Agent — supplied by the caller at construction; the library does not store these.
+- **Resolver (abstraction)**: the interchangeable resolution backend; concrete backends are a precise/structured resolver, a broad-coverage aggregating resolver (optionally enriched via a supplied resolver), an always-offline resolver, and a test double.
+- **Cache (abstraction)**: the interchangeable identity store supporting get-by-id/physical-id/normalized-alias, ranked search, precedence-aware upsert with deduplication, alias add/remove, and override set/clear; shipped in in-memory and durable (SQLite) forms, plus caller-supplied.
+- **Queue (abstraction)**: the interchangeable pending-work store for the batch resolver — enqueue, claim/drain, mark resolved/unresolved/pending, and attempt tracking; shipped in in-memory and durable (cache-backed) forms.
+- **Pending Resolution**: one queued batch item — an opaque caller id, the raw query, its state (pending / resolved / unresolved), an attempt count, and the resolved canonical-target id when resolved.
 - **Object Type**: the closed classification (galaxy, planetary nebula, emission nebula, reflection nebula, dark nebula, open cluster, globular cluster, supernova remnant, galaxy cluster, double star, asterism, other).
 - **Source / Provenance**: the origin of a stored identity (seed, resolved, user-override) governing write precedence.
 
@@ -192,5 +202,5 @@ A developer embeds the library into an existing application and needs stable ids
 - **Ecosystem role**: the library is upstream (name → identity; produces objects). The downstream `target-match` crate (formerly `astro-target-id`) consumes the library's output to rank candidates by angular separation within a frame's field of view; the optics/FOV geometry lives there, not here. The library's position resolve (cone search) is a complementary upstream-service query, not a duplicate of `target-match`'s local ranking. Objects are never passed *into* the resolver.
 - **Seed data is out of scope for v1**: the core install ships no bundled catalog; curated seed catalogs (Messier/Caldwell/NGC/IC/…) will ship as separate packages later. The cache and precedence model already accommodate seed-sourced entries.
 - **No product surfaces**: user interface, IPC/desktop integration, settings panels, attribution rendering, and wiring to any specific application's image/ingest tables are out of scope — those belong to consumers.
-- **Schema scope**: the durable cache owns only the canonical-target, alias, and resolver-settings data; application-specific columns and tables from the origin app are not carried over.
+- **Schema scope**: the durable cache owns only the canonical-target and alias data (plus a pending-resolution table for the durable queue implementation); resolver settings are caller-owned config, not persisted; application-specific columns and tables from the origin app are not carried over. The default durable backend is SQLite; a pure-Rust embedded alternative (e.g. `redb`) is a possible future backend behind the same cache/queue abstractions.
 - **Extraction fidelity**: the resolution logic, normalization, deduplication, precedence, Caldwell translation, object-type mapping, and defensive upstream-response handling are carried over from the proven origin implementation; the primary changes are decoupling (configurable identity/etiquette, owned schema, pluggable cache) and additions (a second first-class resolver, position/cone search, the async batch resolver).
