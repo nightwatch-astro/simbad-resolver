@@ -57,7 +57,7 @@ async fn unknown_query_is_unresolved_unknown() {
     let f = facade(FakeResolver::new()); // default: NotFound
     match f.resolve("definitely-not-an-object").await.unwrap() {
         Resolution::Unresolved { reason, .. } => assert_eq!(reason, UnresolvedReason::Unknown),
-        other => panic!("expected unresolved unknown, got {other:?}"),
+        Resolution::Resolved(t) => panic!("expected unresolved unknown, got resolved {t:?}"),
     }
 }
 
@@ -70,7 +70,7 @@ async fn ambiguous_query_is_unresolved_ambiguous() {
         ));
     match f.resolve("cluster").await.unwrap() {
         Resolution::Unresolved { reason, .. } => assert_eq!(reason, UnresolvedReason::Ambiguous),
-        other => panic!("expected ambiguous, got {other:?}"),
+        Resolution::Resolved(t) => panic!("expected ambiguous, got resolved {t:?}"),
     }
 }
 
@@ -80,7 +80,7 @@ async fn transient_failure_degrades_to_offline() {
         facade(FakeResolver::new().with_default_error(ResolveError::Network("down".to_owned())));
     match f.resolve("M 31").await.unwrap() {
         Resolution::Unresolved { reason, .. } => assert_eq!(reason, UnresolvedReason::Offline),
-        other => panic!("expected offline, got {other:?}"),
+        Resolution::Resolved(t) => panic!("expected offline, got resolved {t:?}"),
     }
 }
 
@@ -127,7 +127,7 @@ async fn caldwell_query_translates_and_binds_alias() {
     // C 14 → NGC 869 (Double Cluster). The fake resolves NGC 869; the facade
     // translates C 14 → NGC 869, resolves, and binds "C 14" as an alias.
     let ngc869 = ResolvedIdentity {
-        simbad_oid: Some(1_000_1),
+        simbad_oid: Some(10_001),
         primary_designation: "NGC 869".to_owned(),
         common_name: Some("Double Cluster".to_owned()),
         object_type: ObjectType::OpenCluster,
@@ -177,4 +177,25 @@ async fn batch_drain_resolves_misses_and_retries_transient() {
     let unresolved = q.get("img2").await.unwrap().unwrap();
     assert_eq!(unresolved.state, simbad_resolver::PendingState::Unresolved);
     assert_eq!(unresolved.attempts, 1, "content miss consumes an attempt");
+}
+
+/// SC-006: the SAME facade code path works against the durable SQLite backend,
+/// unchanged — demonstrating cache-backend substitutability.
+#[cfg(feature = "sqlite")]
+#[tokio::test]
+async fn resolve_flow_is_backend_agnostic_sqlite() {
+    let store = simbad_resolver::sqlite::SqliteStore::in_memory().await.unwrap();
+    let resolver = FakeResolver::new().with_response("M 31", m31());
+    let f = SimbadResolver::new(resolver, store.cache(), ResolverConfig::new("test.targets"));
+
+    let Resolution::Resolved(t) = f.resolve("M31").await.unwrap() else {
+        panic!("expected resolved")
+    };
+    assert_eq!(t.primary_designation, "M 31");
+    assert_eq!(t.object_type, ObjectType::Galaxy);
+
+    // Alias dedup + cache-first hold on SQLite exactly as on memory.
+    let Resolution::Resolved(t2) = f.resolve("NGC 224").await.unwrap() else { panic!() };
+    assert_eq!(t2.id, t.id);
+    assert_eq!(f.resolver().call_count(), 1, "second resolve served from the SQLite cache");
 }
