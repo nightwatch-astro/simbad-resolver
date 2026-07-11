@@ -1,0 +1,18 @@
+[package]
+name = "simbad-resolver-cache"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "The pluggable Cache and Queue traits for simbad-resolver."
+
+[lints]
+workspace = true
+
+[dependencies]
+simbad-resolver-core = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }

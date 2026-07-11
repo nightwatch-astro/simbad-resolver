@@ -1,0 +1,23 @@
+[package]
+name = "simbad-resolver-cache-memory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+description = "In-memory (dashmap) Cache and Queue implementations for simbad-resolver."
+
+[lints]
+workspace = true
+
+[dependencies]
+simbad-resolver-core = { workspace = true }
+simbad-resolver-cache = { workspace = true }
+async-trait = { workspace = true }
+dashmap = { workspace = true }
+uuid = { workspace = true }
+time = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
