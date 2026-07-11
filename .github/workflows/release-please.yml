@@ -58,9 +58,7 @@ jobs:
         uses: rust-lang/crates-io-auth-action@v1
         id: auth
 
-      # cargo publish --workspace (stable since cargo 1.90) publishes every
-      # member in dependency order and waits for each to appear in the index.
-      - name: Publish workspace crates
-        run: cargo publish --workspace
+      - name: Publish to crates.io
+        run: cargo publish
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}

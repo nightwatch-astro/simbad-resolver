@@ -4,30 +4,6 @@
   "bump-minor-pre-major": true,
   "bump-patch-for-minor-pre-major": true,
   "packages": {
-    "crates/simbad-resolver-core": {},
-    "crates/simbad-resolver-caldwell": {},
-    "crates/simbad-resolver-cache": {},
-    "crates/simbad-resolver-cache-memory": {},
-    "crates/simbad-resolver-cache-sqlite": {},
-    "crates/simbad-resolver-tap": {},
-    "crates/simbad-resolver-sesame": {},
-    "crates/simbad-resolver": {}
-  },
-  "plugins": [
-    "cargo-workspace",
-    {
-      "type": "linked-versions",
-      "groupName": "simbad-resolver",
-      "components": [
-        "simbad-resolver-core",
-        "simbad-resolver-caldwell",
-        "simbad-resolver-cache",
-        "simbad-resolver-cache-memory",
-        "simbad-resolver-cache-sqlite",
-        "simbad-resolver-tap",
-        "simbad-resolver-sesame",
-        "simbad-resolver"
-      ]
-    }
-  ]
+    ".": {}
+  }
 }
