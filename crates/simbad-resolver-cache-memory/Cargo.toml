@@ -17,6 +17,7 @@ simbad-resolver-cache = { workspace = true }
 async-trait = { workspace = true }
 dashmap = { workspace = true }
 uuid = { workspace = true }
+time = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
