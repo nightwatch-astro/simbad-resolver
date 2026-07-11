@@ -13,12 +13,9 @@ workspace = true
 
 [dependencies]
 simbad-resolver-core = { workspace = true }
-simbad-resolver-caldwell = { workspace = true }
 reqwest = { workspace = true }
 url = { workspace = true }
-csv = { workspace = true }
 async-trait = { workspace = true }
-thiserror = { workspace = true }
 tracing = { workspace = true }
 
 [dev-dependencies]
