@@ -14,7 +14,7 @@ pub const DEFAULT_TAP_ENDPOINT: &str = "https://simbad.cds.unistra.fr/simbad/sim
 pub const DEFAULT_USER_AGENT: &str = concat!(
     "simbad-resolver/",
     env!("CARGO_PKG_VERSION"),
-    " (+https://github.com/srobroek/simbad-resolver)"
+    " (+https://github.com/nightwatch-astro/simbad-resolver)"
 );
 
 /// Configuration for a network-backed [`crate::Resolver`] (e.g. the SIMBAD TAP

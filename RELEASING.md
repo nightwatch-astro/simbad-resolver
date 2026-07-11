@@ -40,7 +40,7 @@ Bootstrap below). After that, configure a trusted publisher for **each** of the
 eight crates at `https://crates.io/crates/<crate>/settings` → *Trusted
 Publishing* → *Add*:
 
-- Repository owner: `srobroek`
+- Repository owner: `nightwatch-astro`
 - Repository name: `simbad-resolver`
 - Workflow filename: `release-please.yml`
 - Environment: *(leave blank)*

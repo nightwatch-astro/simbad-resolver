@@ -1,6 +1,6 @@
 # simbad-resolver
 
-[![CI](https://github.com/srobroek/simbad-resolver/actions/workflows/ci.yml/badge.svg)](https://github.com/srobroek/simbad-resolver/actions/workflows/ci.yml)
+[![CI](https://github.com/nightwatch-astro/simbad-resolver/actions/workflows/ci.yml/badge.svg)](https://github.com/nightwatch-astro/simbad-resolver/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/simbad-resolver.svg)](https://crates.io/crates/simbad-resolver)
 [![docs.rs](https://img.shields.io/docsrs/simbad-resolver)](https://docs.rs/simbad-resolver)
 
