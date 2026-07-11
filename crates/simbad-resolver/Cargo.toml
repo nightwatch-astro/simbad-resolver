@@ -1,11 +1,10 @@
 # simbad-resolver — the main installable facade crate.
 #
 # Re-exports the resolver ecosystem (core types, TAP + Sesame clients, the
-# pluggable Cache trait) and provides the higher-level orchestration:
+# pluggable Cache/Queue traits) and provides the higher-level orchestration:
 # cache-first resolve, sticky user-override precedence, and an async batch
 # resolver. Feature flags select the optional impls so a lean install pulls
-# only what it needs. This is a placeholder skeleton; the real surface is
-# implemented per specs/.
+# only what it needs.
 [package]
 name = "simbad-resolver"
 version.workspace = true
@@ -14,7 +13,7 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
-description.workspace = true
+description = "Generic, embeddable SIMBAD astronomical target resolver for Rust (name/position to canonical identity, pluggable cache)."
 readme = "../../README.md"
 keywords = ["astronomy", "simbad", "catalog", "astrometry", "resolver"]
 categories = ["science", "api-bindings"]
@@ -22,7 +21,31 @@ categories = ["science", "api-bindings"]
 [lints]
 workspace = true
 
+[features]
+default = ["memory", "tap"]
+# Cache/queue backends
+memory = ["dep:simbad-resolver-cache-memory"]
+sqlite = ["dep:simbad-resolver-cache-sqlite"]
+# Resolver backends
+tap = ["dep:simbad-resolver-tap"]
+sesame = ["dep:simbad-resolver-sesame"]
+# Everything
+full = ["memory", "sqlite", "tap", "sesame"]
+
 [dependencies]
+simbad-resolver-core = { workspace = true }
+simbad-resolver-cache = { workspace = true }
+simbad-resolver-caldwell = { workspace = true }
+async-trait = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }
+tracing = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time", "macros"] }
+# Optional backends (selected by features)
+simbad-resolver-cache-memory = { workspace = true, optional = true }
+simbad-resolver-cache-sqlite = { workspace = true, optional = true }
+simbad-resolver-tap = { workspace = true, optional = true }
+simbad-resolver-sesame = { workspace = true, optional = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["rt", "macros", "rt-multi-thread"] }
