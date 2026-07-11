@@ -2,7 +2,7 @@
 
 use simbad_resolver_cache::{Cache, CachedTarget, SearchHit};
 use simbad_resolver_core::{
-    identity, normalize, AliasKind, ResolveError, ResolvedAlias, Resolver, TargetSource,
+    normalize, AliasKind, ResolveError, ResolvedAlias, Resolver, TargetSource,
 };
 use uuid::Uuid;
 
@@ -53,6 +53,11 @@ impl<R: Resolver, C: Cache> SimbadResolver<R, C> {
     /// Borrow the underlying cache (e.g. for seeding or enumeration).
     pub fn cache(&self) -> &C {
         &self.cache
+    }
+
+    /// Borrow the underlying resolver (e.g. to inspect a fake's call count in tests).
+    pub fn resolver(&self) -> &R {
+        &self.resolver
     }
 
     /// Local, network-free typeahead search over cached aliases.
