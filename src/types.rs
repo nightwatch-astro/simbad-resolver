@@ -277,6 +277,26 @@ pub struct ResolvedIdentity {
     pub source: TargetSource,
 }
 
+impl ResolvedIdentity {
+    /// This target's sky position as a typed `skymath::Equatorial` coordinate.
+    ///
+    /// SIMBAD TAP `basic.ra`/`basic.dec` are ICRS; at planning grade
+    /// (≤ ~1 arcminute) ICRS is treated as J2000 — this encodes that equivalence
+    /// once so consumers don't re-derive it. The raw [`Self::ra_deg`] /
+    /// [`Self::dec_deg`] fields remain the canonical storage.
+    ///
+    /// # Errors
+    ///
+    /// `skymath::Error::OutOfRange` if the stored values are outside RA
+    /// `[0, 360)` / Dec `[-90, +90]` (malformed cache content).
+    pub fn position(&self) -> skymath::Result<skymath::Equatorial> {
+        skymath::Equatorial::j2000(
+            skymath::Angle::from_degrees(self.ra_deg),
+            skymath::Angle::from_degrees(self.dec_deg),
+        )
+    }
+}
+
 /// One result of a position (cone-search) resolution.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PositionMatch {
@@ -284,6 +304,20 @@ pub struct PositionMatch {
     pub identity: ResolvedIdentity,
     /// Angular separation from the query position, in degrees.
     pub separation_deg: f64,
+}
+
+impl PositionMatch {
+    /// This match's sky position as a typed `skymath::Equatorial` coordinate.
+    ///
+    /// Delegates to [`ResolvedIdentity::position`] on [`Self::identity`].
+    ///
+    /// # Errors
+    ///
+    /// `skymath::Error::OutOfRange` if the identity's stored coordinates are out
+    /// of range.
+    pub fn position(&self) -> skymath::Result<skymath::Equatorial> {
+        self.identity.position()
+    }
 }
 
 #[cfg(test)]

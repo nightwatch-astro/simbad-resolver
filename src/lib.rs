@@ -9,6 +9,11 @@
 //! async [`BatchResolver`]. Persistence is a single redb-backed [`Store`] that
 //! serves both durable (file) and ephemeral (in-memory) modes.
 //!
+//! Resolved-object types ([`ResolvedIdentity`], [`CachedTarget`], and cone-search
+//! [`PositionMatch`]) also expose a typed `skymath::Equatorial` position via
+//! `position()` alongside their raw `ra_deg`/`dec_deg` — SIMBAD's ICRS output is
+//! treated as J2000 at planning grade (≤ ~1 arcminute).
+//!
 //! ```no_run
 //! use simbad_resolver::{Resolution, ResolverConfig, SimbadResolver, Store, TapResolver};
 //! # async fn demo() -> Result<(), simbad_resolver::Error> {
