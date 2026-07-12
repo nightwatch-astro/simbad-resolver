@@ -4,23 +4,26 @@ Guidance for agentic tools working in this repository.
 
 ## Project
 
-**simbad-resolver** — a generic, embeddable SIMBAD astronomical target resolver
-for Rust. It resolves an astronomical name/designation (or a sky position) to a
+**simbad-resolver** — a generic SIMBAD astronomical target resolver for Rust. It
+resolves an astronomical name/designation (or a sky position) to a
 canonical identity (ICRS J2000 coordinates, object type, alias set, stable id)
 against SIMBAD, with a pluggable cache. Extracted and generalized from an
 astronomy imaging app's target-resolution subsystem.
 
 ## Architecture
 
-A granular Cargo workspace; the main installable crate is `simbad-resolver`.
-See `docs/adr/0001-stack-and-architecture.md` and `specs/` for the crate split,
-requirements, and rationale. Core principles:
+A **single crate**, `simbad-resolver`, with modules where sub-crates used to be
+(`cache`, `sesame`, plus public `caldwell`/`identity`/`normalize`/`wire`). See
+`docs/adr/0002-single-crate.md` for the current design (it supersedes the 8-crate
+split in ADR-0001) and `specs/` for requirements and rationale. Core principles:
 
 - **Never fabricate** coordinates/identity — unknown/ambiguous/offline is an
   explicit unresolved outcome.
 - **Two first-class resolvers**: TAP (structured, cone-search) and Sesame
   (broad name coverage). The `Resolver` trait is the seam.
-- **Pluggable `Cache`** trait with memory + SQLite impls.
+- **One storage engine**: a `redb`-backed `Store` serving both durable
+  (`Store::open`) and ephemeral (`Store::in_memory`) modes behind the `Cache`/
+  `Queue` traits. (`sqlx` + `dashmap` were dropped — see ADR-0002.)
 - **Configurable, not hardcoded**: UUID id-namespace and User-Agent are
   caller-supplied.
 

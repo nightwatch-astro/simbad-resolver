@@ -1,6 +1,7 @@
 # ADR 0001 — Stack and crate architecture
 
-- Status: accepted
+- Status: accepted — the "Crate split (granular)" section below is **superseded by
+  [ADR-0002](0002-single-crate.md)** (collapsed to a single crate); the rest still holds.
 - Date: 2026-07-11
 - Deciders: Sjors Robroek
 
@@ -22,6 +23,10 @@ and product features (ingest pipeline, UI, settings panes).
 - `cargo fmt` + `cargo clippy -D warnings` enforced in CI and pre-commit.
 
 ### Crate split (granular)
+
+> **Superseded by [ADR-0002](0002-single-crate.md).** The project collapsed to a
+> single `simbad-resolver` crate (modules where crates used to be) with one `redb`
+> storage backend. The 8-crate design below is kept as the historical record.
 
 The main installable crate is `simbad-resolver`. Supporting crates share the
 `simbad-resolver-*` namespace (the `axum` / `tower-http` pattern):

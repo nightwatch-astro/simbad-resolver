@@ -55,9 +55,12 @@ is a plain `cargo publish` via crates.io Trusted Publishing (OIDC).
 
 - One version, one changelog, one crates.io entry, one publish — no lockstep, no
   new-crate rate-limit chains.
-- The seven `simbad-resolver-*` sub-crates published at `0.1.0` are **yanked**
-  and superseded by the single `simbad-resolver` crate, first published at
-  `0.1.0` under the (previously unpublished) facade name.
+- The published `simbad-resolver-*` sub-crates at `0.1.0` are **yanked** and
+  superseded by the single `simbad-resolver` crate, first published at `0.1.0`
+  under the (previously unpublished) facade name. In practice only five were ever
+  published — `-core`, `-cache`, `-caldwell`, `-sesame`, `-tap` — and all five are
+  yanked; `-cache-memory` and `-cache-sqlite` never reached crates.io (the
+  new-crate rate limit stopped the chain), so there was nothing to yank there.
 - No sub-crate remains separately consumable; acceptable, as none had
   independent consumers.
 - Supersedes only the "Crate split (granular)" section of ADR-0001. The rest of
