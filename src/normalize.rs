@@ -118,6 +118,37 @@ pub fn tokenize(normalized: &str) -> Vec<&str> {
     tokens
 }
 
+/// Token-set (Jaccard) similarity between two free-form names, in `0.0..=1.0`.
+///
+/// Both inputs pass through [`normalize`] (so `M31` ≈ `M 31`) and are split into
+/// token **sets**; the score is `|A ∩ B| / |A ∪ B|`. This rewards reordered,
+/// partial, and extra-word matches — `"galaxy andromeda"` vs `"Andromeda Galaxy"`
+/// scores `1.0`, `"Andromeda"` vs `"Andromeda Galaxy"` scores `0.5`. Being
+/// token-granular, it does **not** see intra-token typos: `"andromda"` scores
+/// `0.0` against `"andromeda"`. Two empty inputs score `0.0`.
+#[must_use]
+pub fn token_set_similarity(a: &str, b: &str) -> f32 {
+    jaccard_normalized(&normalize(a), &normalize(b))
+}
+
+/// Jaccard overlap of the whitespace token sets of two already-[`normalize`]d
+/// strings. Callers holding a precomputed normalized form (e.g. a stored alias)
+/// use this to avoid renormalizing on every comparison.
+#[must_use]
+#[allow(clippy::cast_precision_loss)] // token counts are tiny; the ratio is exact in f32
+pub(crate) fn jaccard_normalized(a_norm: &str, b_norm: &str) -> f32 {
+    use std::collections::HashSet;
+    let a: HashSet<&str> = a_norm.split_whitespace().collect();
+    let b: HashSet<&str> = b_norm.split_whitespace().collect();
+    let intersection = a.intersection(&b).count();
+    let union = a.len() + b.len() - intersection;
+    if union == 0 {
+        0.0
+    } else {
+        intersection as f32 / union as f32
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -229,5 +260,50 @@ mod tests {
     fn tokenize_deduplicates() {
         let t = tokenize("m m 31");
         assert_eq!(t, vec!["31", "m"]);
+    }
+
+    // ── token_set_similarity ─────────────────────────────────────────────────
+
+    #[test]
+    fn similarity_identical_names_score_one() {
+        let s = token_set_similarity("Andromeda Galaxy", "andromeda galaxy");
+        assert!((s - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn similarity_is_token_order_insensitive() {
+        let s = token_set_similarity("galaxy andromeda", "Andromeda Galaxy");
+        assert!((s - 1.0).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn similarity_partial_subset_is_ratio_of_shared_tokens() {
+        // {andromeda} within {andromeda, galaxy}: 1 shared / 2 union.
+        let s = token_set_similarity("Andromeda", "Andromeda Galaxy");
+        assert!((s - 0.5).abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn similarity_applies_catalog_normalization() {
+        // "m31" -> "m 31" {m,31}; "M 31 Galaxy" -> {m,31,galaxy}: 2 shared / 3 union.
+        let s = token_set_similarity("m31", "M 31 Galaxy");
+        assert!((s - 2.0_f32 / 3.0).abs() < 1e-6, "got {s}");
+    }
+
+    #[test]
+    fn similarity_disjoint_names_score_zero() {
+        assert!(token_set_similarity("Orion Nebula", "Andromeda Galaxy").abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn similarity_is_token_granular_not_edit_distance() {
+        // A single-character typo shares no whole token -> 0 (documented limitation).
+        assert!(token_set_similarity("andromda", "andromeda").abs() < f32::EPSILON);
+    }
+
+    #[test]
+    fn similarity_empty_inputs_score_zero() {
+        assert!(token_set_similarity("", "andromeda").abs() < f32::EPSILON);
+        assert!(token_set_similarity("", "").abs() < f32::EPSILON);
     }
 }

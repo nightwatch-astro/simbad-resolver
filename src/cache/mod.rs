@@ -70,7 +70,7 @@ pub struct SearchHit {
     pub target: CachedTarget,
     /// The display form of the alias that matched.
     pub matched_alias: String,
-    /// Rank bucket: `0` exact, `1` prefix, `2` substring.
+    /// Rank bucket: `0` exact, `1` prefix, `2` substring, `3` fuzzy.
     pub rank: u8,
 }
 
@@ -80,6 +80,12 @@ pub const RANK_EXACT: u8 = 0;
 pub const RANK_PREFIX: u8 = 1;
 /// Rank bucket for a substring match.
 pub const RANK_SUBSTRING: u8 = 2;
+/// Rank bucket for a fuzzy (token-set similarity) match.
+///
+/// Only produced by the facade [`crate::SimbadResolver::search`] when fuzzy
+/// matching is enabled via [`crate::ResolverConfig::with_fuzzy`]; the
+/// [`Cache::search`] trait method itself never returns this rank.
+pub const RANK_FUZZY: u8 = 3;
 
 /// Outcome of a [`Cache::upsert`] call.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

@@ -41,7 +41,7 @@ pub use crate::batch::{BatchResolver, DrainSummary};
 pub use crate::cache::redb::{RedbCache, RedbQueue, Store};
 pub use crate::cache::{
     Cache, CacheError, CachedTarget, PendingItem, PendingState, Queue, QueueError, SearchHit,
-    UpsertOutcome, RANK_EXACT, RANK_PREFIX, RANK_SUBSTRING,
+    UpsertOutcome, RANK_EXACT, RANK_FUZZY, RANK_PREFIX, RANK_SUBSTRING,
 };
 pub use crate::config::{ResolverConfig, SimbadConfig};
 pub use crate::error::{Error, ResolveError};

@@ -65,6 +65,10 @@ pub struct ResolverConfig {
     /// The id namespace used to derive stable target ids from designations.
     /// Supply your own seed via [`ResolverConfig::new`] for id continuity.
     pub namespace: Uuid,
+    /// Minimum token-set similarity (`0.0..=1.0`) for a fuzzy typeahead hit in
+    /// [`crate::SimbadResolver::search`]. `None` (the default) disables fuzzy
+    /// matching; exact/prefix/substring ranking is unaffected either way.
+    pub fuzzy_min_score: Option<f32>,
 }
 
 impl ResolverConfig {
@@ -72,7 +76,11 @@ impl ResolverConfig {
     /// name). Online resolution defaults to enabled.
     #[must_use]
     pub fn new(namespace_seed: &str) -> Self {
-        Self { online_enabled: true, namespace: crate::identity::namespace(namespace_seed) }
+        Self {
+            online_enabled: true,
+            namespace: crate::identity::namespace(namespace_seed),
+            fuzzy_min_score: None,
+        }
     }
 
     /// Set whether online resolution is enabled.
@@ -86,6 +94,17 @@ impl ResolverConfig {
     #[must_use]
     pub fn with_namespace(mut self, namespace: Uuid) -> Self {
         self.namespace = namespace;
+        self
+    }
+
+    /// Enable fuzzy typeahead in [`crate::SimbadResolver::search`]: after
+    /// exact/prefix/substring matches, remaining result slots are filled with
+    /// hits whose token-set similarity to the query is at least `min_score`
+    /// (clamped to `0.0..=1.0`), in a [`crate::RANK_FUZZY`] tier. Off by default.
+    /// Does not affect [`crate::SimbadResolver::resolve`], which stays exact.
+    #[must_use]
+    pub fn with_fuzzy(mut self, min_score: f32) -> Self {
+        self.fuzzy_min_score = Some(min_score.clamp(0.0, 1.0));
         self
     }
 }
@@ -135,5 +154,17 @@ mod tests {
     fn with_namespace_overrides_the_derived_namespace() {
         let explicit = Uuid::from_u128(0x1234_5678_90ab_cdef_1234_5678_90ab_cdef);
         assert_eq!(ResolverConfig::new("x").with_namespace(explicit).namespace, explicit);
+    }
+
+    #[test]
+    fn fuzzy_is_disabled_by_default() {
+        assert_eq!(ResolverConfig::new("x").fuzzy_min_score, None);
+    }
+
+    #[test]
+    fn with_fuzzy_sets_and_clamps_the_threshold() {
+        assert_eq!(ResolverConfig::new("x").with_fuzzy(0.5).fuzzy_min_score, Some(0.5));
+        assert_eq!(ResolverConfig::new("x").with_fuzzy(2.0).fuzzy_min_score, Some(1.0));
+        assert_eq!(ResolverConfig::new("x").with_fuzzy(-1.0).fuzzy_min_score, Some(0.0));
     }
 }

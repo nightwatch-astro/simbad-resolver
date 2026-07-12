@@ -9,7 +9,7 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use simbad_resolver::{
     AliasKind, BatchResolver, FakeResolver, ObjectType, PendingState, Queue, RedbCache, Resolution,
     ResolveError, ResolvedAlias, ResolvedIdentity, ResolverConfig, SimbadResolver, Store,
-    TargetSource, UnresolvedReason,
+    TargetSource, UnresolvedReason, RANK_FUZZY,
 };
 
 fn m31() -> ResolvedIdentity {
@@ -252,6 +252,58 @@ async fn resolve_flow_is_backend_agnostic_file_backed() {
 
     drop(store);
     let _ = std::fs::remove_file(&path);
+}
+
+#[tokio::test]
+async fn fuzzy_search_matches_reordered_tokens_when_enabled() {
+    // "galaxy andromeda" is neither an exact, prefix, nor substring alias of M31,
+    // but its token set equals "Andromeda Galaxy" — so it matches via the fuzzy tier.
+    let f = SimbadResolver::new(
+        FakeResolver::new().with_response("M 31", m31()),
+        store().cache(),
+        ResolverConfig::new("test.targets").with_fuzzy(0.5),
+    );
+    f.resolve("M 31").await.unwrap();
+
+    let hits = f.search("galaxy andromeda", 10).await.unwrap();
+    assert_eq!(hits.len(), 1, "reordered tokens matched via the fuzzy tier");
+    assert_eq!(hits[0].target.primary_designation, "M 31");
+    assert_eq!(hits[0].rank, RANK_FUZZY);
+}
+
+#[tokio::test]
+async fn fuzzy_search_is_off_by_default() {
+    // Same query, but no with_fuzzy(): exact/prefix/substring only → no hit.
+    let f = facade(FakeResolver::new().with_response("M 31", m31()));
+    f.resolve("M 31").await.unwrap();
+    assert!(f.search("galaxy andromeda", 10).await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn fuzzy_config_does_not_leak_into_resolve() {
+    // Seed M31 online, then reuse the same store offline with fuzzy enabled.
+    let cache = store().cache();
+    let online = SimbadResolver::new(
+        FakeResolver::new().with_response("M 31", m31()),
+        cache.clone(),
+        ResolverConfig::new("test.targets"),
+    );
+    online.resolve("M 31").await.unwrap();
+
+    let offline = SimbadResolver::new(
+        FakeResolver::new(),
+        cache,
+        ResolverConfig::new("test.targets").with_online(false).with_fuzzy(0.1),
+    );
+    // resolve() stays exact: a fuzzy-similar query is NOT resolved from the cache.
+    assert!(matches!(
+        offline.resolve("galaxy andromeda").await.unwrap(),
+        Resolution::Unresolved { reason: UnresolvedReason::Offline, .. }
+    ));
+    // ...yet the same query IS surfaced by fuzzy search.
+    let hits = offline.search("galaxy andromeda", 10).await.unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].rank, RANK_FUZZY);
 }
 
 /// A temp-dir database path unique to this process + call, so parallel tests
