@@ -7,20 +7,20 @@ default:
 
 # Build the whole workspace
 build:
-    cargo build --workspace --all-features
+    cargo build --all-features
 
 # Run all tests (offline; live SIMBAD tests are #[ignore]-gated)
 test:
-    cargo test --workspace --all-features
+    cargo test --all-features
 
 # Run live SIMBAD integration tests (needs network)
 test-live:
-    cargo test --workspace --all-features -- --ignored
+    cargo test --all-features -- --ignored
 
 # Format check + lint (clippy denies warnings)
 lint:
     cargo fmt --all --check
-    cargo clippy --workspace --all-targets --all-features -- -D warnings
+    cargo clippy --all-targets --all-features -- -D warnings
 
 # Auto-format
 fmt:
@@ -28,11 +28,11 @@ fmt:
 
 # Type-check fast
 check:
-    cargo check --workspace --all-features
+    cargo check --all-features
 
 # Docs (deny broken intra-doc links)
 doc:
-    RUSTDOCFLAGS="-D warnings" cargo doc --workspace --all-features --no-deps
+    RUSTDOCFLAGS="-D warnings" cargo doc --all-features --no-deps
 
 # Remove build artifacts
 clean:

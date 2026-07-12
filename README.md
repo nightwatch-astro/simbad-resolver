@@ -15,66 +15,52 @@ are stored in a pluggable cache, so repeated lookups are served locally instead
 of re-querying SIMBAD, and an async batch resolver processes many names against
 a durable queue.
 
+It is a single crate with no required feature flags: the network resolvers and a
+redb-backed store (durable or in-memory) are always available.
+
 ## Documentation
 
 Full API documentation is generated from the source and published on docs.rs:
-
-- **[docs.rs/simbad-resolver](https://docs.rs/simbad-resolver)** — the facade
-  crate and its re-exports (start here).
-- Each crate is documented individually; links to the sub-crates appear in the
-  facade's documentation.
-
-To build the documentation locally:
+**[docs.rs/simbad-resolver](https://docs.rs/simbad-resolver)**.
 
 ```bash
-cargo doc --workspace --all-features --open
+cargo doc --open
 ```
 
-## Workspace crates
+## Resolving
 
-| Crate | Role |
-|---|---|
-| `simbad-resolver` | Facade: cache-first resolve, user-override precedence, async batch resolution, feature-gated re-exports of the crates below |
-| `simbad-resolver-core` | Core types (`ObjectType`, `TargetSource`, `ResolvedIdentity`), query normalization, id derivation, and the `Resolver` trait |
-| `simbad-resolver-tap` | SIMBAD TAP/ADQL client: resolve by name and cone search by position |
-| `simbad-resolver-sesame` | CDS Sesame client: resolve by name (SIMBAD/NED/VizieR aggregation) |
-| `simbad-resolver-cache` | The `Cache` and `Queue` traits |
-| `simbad-resolver-cache-memory` | In-memory `Cache`/`Queue` implementation |
-| `simbad-resolver-cache-sqlite` | SQLite `Cache`/`Queue` implementation |
-| `simbad-resolver-caldwell` | Caldwell (C1–C109) to NGC/IC designation map |
+Two SIMBAD backends are available, both built in:
 
-## Resolver backends
+- **`TapResolver`** queries the SIMBAD TAP service with ADQL. It returns SIMBAD
+  object ids, object types, the full alias set, and supports cone search by
+  position.
+- **`SesameResolver`** queries the CDS Sesame name resolver, which aggregates
+  SIMBAD, NED, and VizieR. It resolves a broader range of names but returns
+  coordinates and a primary designation only; object type and aliases can be
+  filled in by supplying a `TapResolver` as an enricher.
 
-- **TAP** (`simbad-resolver-tap`) queries the SIMBAD TAP service with ADQL. It
-  returns SIMBAD object ids, object types, the full alias set, and supports cone
-  search by position.
-- **Sesame** (`simbad-resolver-sesame`) queries the CDS Sesame name resolver,
-  which aggregates SIMBAD, NED, and VizieR. It resolves a broader range of names
-  but returns coordinates and a primary designation only; object type and
-  aliases can be filled in by supplying a TAP resolver as an enricher.
+## Storage
 
-## Cache backends
+The `Cache` and `Queue` traits are the persistence abstraction; bring your own
+implementation, or use the built-in `Store`, backed by
+[redb](https://crates.io/crates/redb) (a pure-Rust embedded ACID store):
 
-The `Cache` trait is a durable store of resolved identities, keyed for
-deduplication and typeahead search. Two implementations are provided —
-in-memory (`simbad-resolver-cache-memory`) and SQLite
-(`simbad-resolver-cache-sqlite`) — and callers can supply their own.
+- `Store::open(path)` — durable, file-backed; survives restarts.
+- `Store::in_memory()` — ephemeral, nothing written to disk.
+
+Both expose `.cache()` and `.queue()` handles over the same database.
 
 ## Usage
 
 ```rust
-use simbad_resolver::{Resolution, ResolverConfig, SimbadResolver};
-use simbad_resolver::memory::MemoryCache;
-use simbad_resolver_tap::SimbadTapResolver;
+use simbad_resolver::{Resolution, ResolverConfig, SimbadResolver, Store, TapResolver};
 
 # async fn run() -> Result<(), Box<dyn std::error::Error>> {
-let resolver = SimbadResolver::new(
-    SimbadTapResolver::with_defaults()?,
-    MemoryCache::default(),
-    ResolverConfig::new("your.namespace"),
-);
+let resolver = TapResolver::with_defaults()?;
+let store = Store::in_memory()?; // or Store::open("targets.redb")?
+let facade = SimbadResolver::new(resolver, store.cache(), ResolverConfig::new("your.namespace"));
 
-match resolver.resolve("M31").await? {
+match facade.resolve("M31").await? {
     Resolution::Resolved(target) => {
         println!("{} at ({}, {})", target.primary_designation, target.ra_deg, target.dec_deg);
     }
@@ -84,11 +70,9 @@ match resolver.resolve("M31").await? {
 # }
 ```
 
-Selecting backends via crate features:
-
 ```toml
 [dependencies]
-simbad-resolver = { version = "0.1", features = ["tap", "sqlite"] }
+simbad-resolver = "0.1"
 ```
 
 ## Attribution

@@ -1,66 +1,49 @@
-# simbad-resolver — Cargo workspace root.
+# simbad-resolver — single-crate SIMBAD astronomical target resolver.
 #
-# A generic, embeddable SIMBAD astronomical target resolver for Rust. Granular
-# `simbad-resolver-*` crates (see docs/adr/0001-stack-and-architecture.md); the
-# main installable facade is `simbad-resolver`.
-[workspace]
-resolver = "2"
-members = [
-    "crates/simbad-resolver-core",
-    "crates/simbad-resolver-caldwell",
-    "crates/simbad-resolver-tap",
-    "crates/simbad-resolver-sesame",
-    "crates/simbad-resolver-cache",
-    "crates/simbad-resolver-cache-memory",
-    "crates/simbad-resolver-cache-sqlite",
-    "crates/simbad-resolver",
-]
-
-[workspace.package]
+# A generic, embeddable library that resolves astronomical names, designations,
+# and positions to canonical identities via SIMBAD, with a pluggable redb-backed
+# cache/queue (see docs/adr/0001-stack-and-architecture.md).
+[package]
+name = "simbad-resolver"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.82"
 license = "Apache-2.0"
 repository = "https://github.com/nightwatch-astro/simbad-resolver"
 authors = ["Sjors Robroek <s.robroek@vxsan.com>"]
+description = "SIMBAD astronomical target resolver for Rust: resolve names, designations, and positions to canonical identities, with a pluggable redb-backed cache."
+readme = "README.md"
+keywords = ["astronomy", "simbad", "catalog", "astrometry", "resolver"]
+categories = ["science", "api-bindings"]
 
-[workspace.dependencies]
-# Internal crates (path-linked; version bumps handled by release-please later).
-simbad-resolver-core = { path = "crates/simbad-resolver-core", version = "0.1.0" }
-simbad-resolver-caldwell = { path = "crates/simbad-resolver-caldwell", version = "0.1.0" }
-simbad-resolver-tap = { path = "crates/simbad-resolver-tap", version = "0.1.0" }
-simbad-resolver-sesame = { path = "crates/simbad-resolver-sesame", version = "0.1.0" }
-simbad-resolver-cache = { path = "crates/simbad-resolver-cache", version = "0.1.0" }
-simbad-resolver-cache-memory = { path = "crates/simbad-resolver-cache-memory", version = "0.1.0" }
-simbad-resolver-cache-sqlite = { path = "crates/simbad-resolver-cache-sqlite", version = "0.1.0" }
+# Build the documentation on docs.rs with every feature enabled.
+[package.metadata.docs.rs]
+all-features = true
 
-# External — best crate per job (dependencies are unconstrained for this project).
+[features]
+default = []
+# Exposes the in-memory `FakeResolver` test double to downstream tests/benches.
+test-util = []
+
+[dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
-anyhow = "1"
 uuid = { version = "1", features = ["serde", "v4", "v5"] }
 unicode-normalization = "0.1"
 async-trait = "0.1"
 tokio = { version = "1", features = ["rt", "macros", "sync", "time"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"] }
 url = "2"
-percent-encoding = "2"
-csv = "1"
-dashmap = "6"
-sqlx = { version = "0.8", default-features = false, features = [
-    "sqlite",
-    "runtime-tokio",
-    "tls-rustls",
-    "migrate",
-] }
 time = { version = "0.3", features = ["formatting", "parsing"] }
 tracing = "0.1"
+redb = "4"
 
-# Dev-only: offline HTTP mocking for the network resolver crates (-tap, -sesame).
+[dev-dependencies]
+tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }
 wiremock = "0.6"
 
-[workspace.lints.clippy]
+[lints.clippy]
 pedantic = { level = "warn", priority = -1 }
 missing_errors_doc = "allow"
 missing_panics_doc = "allow"
@@ -69,5 +52,5 @@ module_name_repetitions = "allow"
 # backtick-suited; keep prose readable rather than fighting doc_markdown.
 doc_markdown = "allow"
 
-[workspace.lints.rust]
+[lints.rust]
 missing_docs = "warn"
