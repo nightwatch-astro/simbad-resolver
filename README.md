@@ -50,6 +50,22 @@ implementation, or use the built-in `Store`, backed by
 
 Both expose `.cache()` and `.queue()` handles over the same database.
 
+## Coordinates
+
+Resolved-object types (`ResolvedIdentity`, `CachedTarget`, and the cone-search
+`PositionMatch`) keep their canonical `ra_deg`/`dec_deg` (`f64`, ICRS J2000
+degrees) and also expose a typed accessor:
+
+```rust,ignore
+let eq = target.position()?; // skymath::Equatorial: validated RA/Dec carrying its epoch
+```
+
+`position()` returns a [skymath](https://crates.io/crates/skymath) `Equatorial`
+— the shared, domain-validated coordinate type — so downstream consumers
+(ranking, formatting) share one representation with no conversion. SIMBAD's ICRS
+output is treated as J2000 at planning grade (≤ ~1 arcminute); the raw `f64`
+fields remain the source of truth.
+
 ## Usage
 
 ```rust

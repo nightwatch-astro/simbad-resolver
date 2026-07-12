@@ -61,6 +61,23 @@ impl CachedTarget {
             source: self.source,
         }
     }
+
+    /// This target's sky position as a typed `skymath::Equatorial` coordinate.
+    ///
+    /// SIMBAD coordinates are ICRS; at planning grade (≤ ~1 arcminute) ICRS is
+    /// treated as J2000. The raw [`Self::ra_deg`] / [`Self::dec_deg`] fields
+    /// remain the canonical storage.
+    ///
+    /// # Errors
+    ///
+    /// `skymath::Error::OutOfRange` if the stored values are outside RA
+    /// `[0, 360)` / Dec `[-90, +90]` (malformed cache content).
+    pub fn position(&self) -> skymath::Result<skymath::Equatorial> {
+        skymath::Equatorial::j2000(
+            skymath::Angle::from_degrees(self.ra_deg),
+            skymath::Angle::from_degrees(self.dec_deg),
+        )
+    }
 }
 
 /// A single ranked typeahead hit.

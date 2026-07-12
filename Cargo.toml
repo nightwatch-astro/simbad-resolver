@@ -43,6 +43,8 @@ url = "2"
 time = { version = "0.3", features = ["formatting", "parsing"] }
 tracing = "0.1"
 redb = "4"
+# Shared planning-grade coordinate primitives (typed Equatorial position accessor).
+skymath = "0.1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["rt", "macros", "rt-multi-thread"] }
