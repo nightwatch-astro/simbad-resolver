@@ -1,8 +1,10 @@
 //! Cache-first single resolution + sticky user override.
 
+use std::collections::HashSet;
+
 use uuid::Uuid;
 
-use crate::cache::{Cache, CachedTarget, SearchHit};
+use crate::cache::{Cache, CachedTarget, SearchHit, RANK_FUZZY};
 use crate::error::{Error, ResolveError};
 use crate::types::{AliasKind, ResolvedAlias, TargetSource};
 use crate::{caldwell, config::ResolverConfig, normalize, Resolver};
@@ -60,8 +62,58 @@ impl<R: Resolver, C: Cache> SimbadResolver<R, C> {
     }
 
     /// Local, network-free typeahead search over cached aliases.
+    ///
+    /// Returns exact/prefix/substring matches (see [`Cache::search`]). When fuzzy
+    /// matching is enabled via [`ResolverConfig::with_fuzzy`] and fewer than
+    /// `limit` of those are found, the remaining slots are filled with token-set
+    /// similarity matches ([`crate::RANK_FUZZY`]), best score first. [`Self::resolve`]
+    /// is never affected — it stays exact-normalized and never fabricates.
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>, Error> {
-        Ok(self.cache.search(query, limit).await?)
+        let mut hits = self.cache.search(query, limit).await?;
+
+        if let Some(min_score) = self.config.fuzzy_min_score {
+            let q = normalize::normalize(query);
+            if !q.is_empty() && hits.len() < limit {
+                let already: HashSet<Uuid> = hits.iter().map(|h| h.target.id).collect();
+
+                // Score each not-yet-matched target by its best-matching alias.
+                let mut scored: Vec<(f32, usize, SearchHit)> = Vec::new();
+                for target in self.cache.list().await? {
+                    if already.contains(&target.id) {
+                        continue;
+                    }
+                    let mut best: Option<(f32, String, usize)> = None;
+                    for alias in &target.aliases {
+                        let score = normalize::jaccard_normalized(&q, &alias.normalized);
+                        if score >= min_score
+                            && best.as_ref().is_none_or(|(prev, _, _)| score > *prev)
+                        {
+                            best = Some((score, alias.alias.clone(), alias.normalized.len()));
+                        }
+                    }
+                    if let Some((score, matched_alias, normalized_len)) = best {
+                        scored.push((
+                            score,
+                            normalized_len,
+                            SearchHit { target, matched_alias, rank: RANK_FUZZY },
+                        ));
+                    }
+                }
+
+                // Best score first; ties break on the shorter matched alias, then
+                // the target's primary designation (stable, deterministic order).
+                scored.sort_by(|a, b| {
+                    b.0.total_cmp(&a.0).then(a.1.cmp(&b.1)).then_with(|| {
+                        a.2.target.primary_designation.cmp(&b.2.target.primary_designation)
+                    })
+                });
+                for (_, _, hit) in scored.into_iter().take(limit - hits.len()) {
+                    hits.push(hit);
+                }
+            }
+        }
+
+        Ok(hits)
     }
 
     /// Cache-first resolve. On a cache miss and when online is enabled, consult
