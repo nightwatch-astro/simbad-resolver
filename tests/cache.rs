@@ -26,6 +26,7 @@ fn m31(source: TargetSource) -> ResolvedIdentity {
         otype_raw: "G".to_owned(),
         ra_deg: 10.684_708,
         dec_deg: 41.268_75,
+        v_mag: Some(3.44),
         aliases: vec![
             ResolvedAlias::new("M 31", AliasKind::Designation),
             ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -44,6 +45,7 @@ fn m101() -> ResolvedIdentity {
         otype_raw: "G".to_owned(),
         ra_deg: 210.802_42,
         dec_deg: 54.348_95,
+        v_mag: Some(7.86),
         aliases: vec![
             ResolvedAlias::new("M 101", AliasKind::Designation),
             ResolvedAlias::new("NGC 5457", AliasKind::Designation),

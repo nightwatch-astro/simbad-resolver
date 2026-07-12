@@ -7,7 +7,7 @@
 use std::sync::atomic::{AtomicU32, Ordering};
 
 use simbad_resolver::{
-    AliasKind, BatchResolver, FakeResolver, ObjectType, PendingState, Queue, RedbCache, Resolution,
+    AliasKind, BatchResolver, CacheBackend, FakeResolver, ObjectType, PendingState, Resolution,
     ResolveError, ResolvedAlias, ResolvedIdentity, ResolverConfig, SimbadResolver, Store,
     TargetSource, UnresolvedReason, RANK_FUZZY,
 };
@@ -21,6 +21,7 @@ fn m31() -> ResolvedIdentity {
         otype_raw: "G".to_owned(),
         ra_deg: 10.684_708,
         dec_deg: 41.268_75,
+        v_mag: Some(3.44),
         aliases: vec![
             ResolvedAlias::new("M 31", AliasKind::Designation),
             ResolvedAlias::new("NGC 224", AliasKind::Designation),
@@ -34,8 +35,9 @@ fn store() -> Store {
     Store::in_memory().expect("in-memory store")
 }
 
-fn facade(resolver: FakeResolver) -> SimbadResolver<FakeResolver, RedbCache> {
-    SimbadResolver::new(resolver, store().cache(), ResolverConfig::new("test.targets"))
+fn facade(resolver: FakeResolver) -> SimbadResolver<FakeResolver> {
+    SimbadResolver::new(resolver, CacheBackend::InMemory, ResolverConfig::new("test.targets"))
+        .expect("in-memory facade")
 }
 
 #[tokio::test]
@@ -93,15 +95,21 @@ async fn online_disabled_never_calls_resolver_but_cache_still_works() {
     // Seed the cache while online, then disable online (sharing the same store).
     let cache = store().cache();
     let resolver = FakeResolver::new().with_response("M 31", m31());
-    let online = SimbadResolver::new(resolver, cache.clone(), ResolverConfig::new("test.targets"));
+    let online = SimbadResolver::new(
+        resolver,
+        CacheBackend::custom(cache.clone()),
+        ResolverConfig::new("test.targets"),
+    )
+    .unwrap();
     online.resolve("M 31").await.unwrap();
 
     let offline_resolver = FakeResolver::new().with_response("M 31", m31());
     let offline = SimbadResolver::new(
         offline_resolver,
-        cache,
+        CacheBackend::custom(cache),
         ResolverConfig::new("test.targets").with_online(false),
-    );
+    )
+    .unwrap();
     // Cached object still resolves with no resolver call.
     assert!(matches!(offline.resolve("NGC 224").await.unwrap(), Resolution::Resolved(_)));
     // Unknown object → offline (not a network attempt).
@@ -138,6 +146,7 @@ async fn caldwell_query_translates_and_binds_alias() {
         otype_raw: "OpC".to_owned(),
         ra_deg: 34.75,
         dec_deg: 57.13,
+        v_mag: None,
         aliases: vec![ResolvedAlias::new("NGC 869", AliasKind::Designation)],
         source: TargetSource::Resolved,
     };
@@ -235,9 +244,13 @@ async fn caldwell_without_a_designation_is_unresolved_unknown() {
 #[tokio::test]
 async fn resolve_flow_is_backend_agnostic_file_backed() {
     let path = unique_db_path();
-    let store = Store::open(&path).expect("open file-backed store");
     let resolver = FakeResolver::new().with_response("M 31", m31());
-    let f = SimbadResolver::new(resolver, store.cache(), ResolverConfig::new("test.targets"));
+    let f = SimbadResolver::new(
+        resolver,
+        CacheBackend::file(&path),
+        ResolverConfig::new("test.targets"),
+    )
+    .expect("open file-backed facade");
 
     let Resolution::Resolved(t) = f.resolve("M31").await.unwrap() else {
         panic!("expected resolved")
@@ -250,7 +263,7 @@ async fn resolve_flow_is_backend_agnostic_file_backed() {
     assert_eq!(t2.id, t.id);
     assert_eq!(f.resolver().call_count(), 1, "second resolve served from the file-backed cache");
 
-    drop(store);
+    drop(f);
     let _ = std::fs::remove_file(&path);
 }
 
@@ -260,9 +273,10 @@ async fn fuzzy_search_matches_reordered_tokens_when_enabled() {
     // but its token set equals "Andromeda Galaxy" — so it matches via the fuzzy tier.
     let f = SimbadResolver::new(
         FakeResolver::new().with_response("M 31", m31()),
-        store().cache(),
+        CacheBackend::InMemory,
         ResolverConfig::new("test.targets").with_fuzzy(0.5),
-    );
+    )
+    .unwrap();
     f.resolve("M 31").await.unwrap();
 
     let hits = f.search("galaxy andromeda", 10).await.unwrap();
@@ -285,16 +299,18 @@ async fn fuzzy_config_does_not_leak_into_resolve() {
     let cache = store().cache();
     let online = SimbadResolver::new(
         FakeResolver::new().with_response("M 31", m31()),
-        cache.clone(),
+        CacheBackend::custom(cache.clone()),
         ResolverConfig::new("test.targets"),
-    );
+    )
+    .unwrap();
     online.resolve("M 31").await.unwrap();
 
     let offline = SimbadResolver::new(
         FakeResolver::new(),
-        cache,
+        CacheBackend::custom(cache),
         ResolverConfig::new("test.targets").with_online(false).with_fuzzy(0.1),
-    );
+    )
+    .unwrap();
     // resolve() stays exact: a fuzzy-similar query is NOT resolved from the cache.
     assert!(matches!(
         offline.resolve("galaxy andromeda").await.unwrap(),

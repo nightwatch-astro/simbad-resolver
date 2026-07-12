@@ -15,11 +15,13 @@
 //! treated as J2000 at planning grade (≤ ~1 arcminute).
 //!
 //! ```no_run
-//! use simbad_resolver::{Resolution, ResolverConfig, SimbadResolver, Store, TapResolver};
+//! use simbad_resolver::{CacheBackend, Resolution, ResolverConfig, SimbadResolver, TapResolver};
 //! # async fn demo() -> Result<(), simbad_resolver::Error> {
 //! let resolver = TapResolver::with_defaults().expect("client");
-//! let store = Store::in_memory()?;
-//! let facade = SimbadResolver::new(resolver, store.cache(), ResolverConfig::new("my-app.targets"));
+//! // Zero-config ephemeral cache; use `CacheBackend::file("targets.redb")` to persist,
+//! // or `CacheBackend::custom(my_cache)` to bring your own backend.
+//! let facade =
+//!     SimbadResolver::new(resolver, CacheBackend::InMemory, ResolverConfig::new("my-app.targets"))?;
 //! if let Resolution::Resolved(t) = facade.resolve("M 31").await? {
 //!     println!("{} @ ({}, {})", t.primary_designation, t.ra_deg, t.dec_deg);
 //! }
@@ -50,7 +52,9 @@ pub use crate::cache::{
 };
 pub use crate::config::{ResolverConfig, SimbadConfig};
 pub use crate::error::{Error, ResolveError};
-pub use crate::orchestrate::{Resolution, SimbadResolver, UnresolvedReason};
+pub use crate::orchestrate::{
+    CacheBackend, FileCache, Resolution, SimbadResolver, UnresolvedReason,
+};
 pub use crate::resolver::{OfflineResolver, PositionResolver, Resolver};
 pub use crate::sesame::SesameResolver;
 pub use crate::tap::TapResolver;

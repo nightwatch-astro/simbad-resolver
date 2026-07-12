@@ -271,6 +271,10 @@ pub struct ResolvedIdentity {
     pub ra_deg: f64,
     /// ICRS J2000 declination in decimal degrees, `[-90, 90]`.
     pub dec_deg: f64,
+    /// Johnson V-band apparent magnitude (SIMBAD `allfluxes.V`) when the object
+    /// has V photometry; `None` otherwise. Many extended/dark objects and
+    /// seed/override-only entries have no V magnitude.
+    pub v_mag: Option<f64>,
     /// All designations + common names for this object (the typeahead surface).
     pub aliases: Vec<ResolvedAlias>,
     /// Provenance of this identity.

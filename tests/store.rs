@@ -30,6 +30,7 @@ fn m31() -> ResolvedIdentity {
         otype_raw: "G".to_owned(),
         ra_deg: 10.684_708,
         dec_deg: 41.268_75,
+        v_mag: Some(3.44),
         aliases: vec![
             ResolvedAlias::new("M 31", AliasKind::Designation),
             ResolvedAlias::new("NGC 224", AliasKind::Designation),
