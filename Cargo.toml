@@ -5,7 +5,7 @@
 # cache/queue (see docs/adr/0001-stack-and-architecture.md).
 [package]
 name = "simbad-resolver"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.82"
 license = "Apache-2.0"
