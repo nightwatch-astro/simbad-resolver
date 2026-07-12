@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.2](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.1.1...simbad-resolver-v0.1.2) (2026-07-12)
+
+
+### Features
+
+* opt-in fuzzy (token-set) typeahead in search() ([#7](https://github.com/nightwatch-astro/simbad-resolver/issues/7)) ([7c316a8](https://github.com/nightwatch-astro/simbad-resolver/commit/7c316a8ca947b284cda38cdca8c97c1ad211da3d))
+
 ## [0.1.1](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.1.0...simbad-resolver-v0.1.1) (2026-07-12)
 
 
