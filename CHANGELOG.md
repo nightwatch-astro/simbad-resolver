@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.3](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.1.2...simbad-resolver-v0.1.3) (2026-07-12)
+
+
+### Features
+
+* typed skymath Equatorial position() on resolved-object types ([#9](https://github.com/nightwatch-astro/simbad-resolver/issues/9)) ([46750c8](https://github.com/nightwatch-astro/simbad-resolver/commit/46750c8038939c8ac2ce6f17f1c4455115f89946))
+
 ## [0.1.2](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.1.1...simbad-resolver-v0.1.2) (2026-07-12)
 
 
