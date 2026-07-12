@@ -1,0 +1,30 @@
+name: live-simbad
+
+# Live integration tests against the real CDS SIMBAD TAP service. Kept OUT of
+# the PR-gating `CI` workflow so a SIMBAD outage or slowdown never blocks a PR
+# or release; this runs on a weekly schedule (and on demand) to catch upstream
+# schema drift — e.g. the `allfluxes.V` join breaking.
+
+on:
+  schedule:
+    - cron: "0 6 * * 1" # Mondays 06:00 UTC
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  live:
+    name: live SIMBAD integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Run live SIMBAD tests (#[ignore]-gated)
+        run: cargo test --test live_simbad -- --ignored --nocapture
