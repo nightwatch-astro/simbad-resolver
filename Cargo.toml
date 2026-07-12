@@ -15,6 +15,11 @@ description = "SIMBAD astronomical target resolver for Rust: resolve names, desi
 readme = "README.md"
 keywords = ["astronomy", "simbad", "catalog", "astrometry", "resolver"]
 categories = ["science", "api-bindings"]
+# Ship only the crate itself — not the repo's agentic tooling / planning docs.
+# Cargo.toml, Cargo.lock, LICENSE and README are picked up regardless; this
+# whitelist keeps everything else (.specify/, .claude/, specs/, HANDOVER.md, …)
+# out of the published package.
+include = ["/src/**/*", "/tests/**/*", "/README.md", "/LICENSE"]
 
 # Build the documentation on docs.rs with every feature enabled.
 [package.metadata.docs.rs]
