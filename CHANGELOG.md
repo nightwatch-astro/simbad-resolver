@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.2.0](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.1.3...simbad-resolver-v0.2.0) (2026-07-12)
+
+
+### ⚠ BREAKING CHANGES
+
+* `SimbadResolver::new` takes a `CacheBackend` and returns `Result`; `SimbadResolver` and `BatchResolver` drop their cache/queue type parameters.
+`ResolvedIdentity` and `CachedTarget` gain a `v_mag` field.
+
+### Features
+
+* select cache backend via CacheBackend; type-erase the facade ([#11](https://github.com/nightwatch-astro/simbad-resolver/issues/11)) ([eed8d31](https://github.com/nightwatch-astro/simbad-resolver/commit/eed8d31ee635014604afd0c6e07cd67c91ad9cb8))
+
 ## [0.1.3](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.1.2...simbad-resolver-v0.1.3) (2026-07-12)
 
 
