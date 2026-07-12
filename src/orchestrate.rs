@@ -1,9 +1,12 @@
 //! Cache-first single resolution + sticky user override.
 
 use std::collections::HashSet;
+use std::path::PathBuf;
+use std::sync::Arc;
 
 use uuid::Uuid;
 
+use crate::cache::redb::Store;
 use crate::cache::{Cache, CachedTarget, SearchHit, RANK_FUZZY};
 use crate::error::{Error, ResolveError};
 use crate::types::{AliasKind, ResolvedAlias, TargetSource};
@@ -35,25 +38,101 @@ pub enum Resolution {
     },
 }
 
+/// How a [`SimbadResolver`] obtains its cache backend.
+///
+/// The built-in variants select the redb-backed [`Store`](crate::Store) at
+/// construction; [`Custom`](Self::Custom) accepts any [`Cache`]. Backend tuning
+/// lives on the variant that owns it (e.g. [`FileCache`]), so the constructor
+/// signature never grows.
+///
+/// There is deliberately no "disabled" variant: the cache is load-bearing (the
+/// resolve pipeline returns cached rows), so [`InMemory`](Self::InMemory) is the
+/// ephemeral, nothing-persisted choice and is what [`Default`] selects. For a
+/// truly uncached one-shot lookup, call a bare [`Resolver`] directly instead of
+/// the facade.
+pub enum CacheBackend {
+    /// Ephemeral in-memory redb store (nothing persisted to disk).
+    InMemory,
+    /// Durable, file-backed redb store.
+    File(FileCache),
+    /// A caller-supplied cache backend.
+    Custom(Arc<dyn Cache>),
+}
+
+impl Default for CacheBackend {
+    /// The zero-config default: an ephemeral in-memory store.
+    fn default() -> Self {
+        Self::InMemory
+    }
+}
+
+impl CacheBackend {
+    /// A file-backed backend at `path` with default options.
+    #[must_use]
+    pub fn file(path: impl Into<PathBuf>) -> Self {
+        Self::File(FileCache::new(path))
+    }
+
+    /// Wrap a caller-supplied cache backend.
+    #[must_use]
+    pub fn custom(cache: impl Cache + 'static) -> Self {
+        Self::Custom(Arc::new(cache))
+    }
+
+    /// Materialise the selection into a shared [`Cache`] handle.
+    fn into_cache(self) -> Result<Arc<dyn Cache>, Error> {
+        match self {
+            Self::InMemory => Ok(Arc::new(Store::in_memory()?.cache())),
+            Self::File(f) => Ok(Arc::new(Store::open(f.path)?.cache())),
+            Self::Custom(c) => Ok(c),
+        }
+    }
+}
+
+/// Options for the built-in file-backed cache.
+///
+/// Future tunables (cache size, durability, …) are added here, defaulted —
+/// never as new constructor arguments.
+#[derive(Clone, Debug)]
+pub struct FileCache {
+    /// Path to the redb database file (created if missing).
+    pub path: PathBuf,
+}
+
+impl FileCache {
+    /// A file cache at `path` with default options.
+    #[must_use]
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self { path: path.into() }
+    }
+}
+
 /// The cache-first resolver facade.
 ///
-/// Generic over any [`Resolver`] backend (TAP, Sesame, offline, fake) and any
-/// [`Cache`] backend (memory, SQLite, custom).
-pub struct SimbadResolver<R: Resolver, C: Cache> {
+/// Generic over any [`Resolver`] backend (TAP, Sesame, offline, fake); the cache
+/// backend is chosen at construction via [`CacheBackend`] and type-erased, so
+/// the facade type does not carry it.
+pub struct SimbadResolver<R: Resolver> {
     resolver: R,
-    cache: C,
+    cache: Arc<dyn Cache>,
     config: ResolverConfig,
 }
 
-impl<R: Resolver, C: Cache> SimbadResolver<R, C> {
-    /// Construct a facade from a resolver, a cache, and config.
-    pub fn new(resolver: R, cache: C, config: ResolverConfig) -> Self {
-        Self { resolver, cache, config }
+impl<R: Resolver> SimbadResolver<R> {
+    /// Construct a facade from a resolver, a [`CacheBackend`], and config.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`Error`] if a built-in ([`CacheBackend::InMemory`] /
+    /// [`CacheBackend::File`]) store cannot be opened or initialised.
+    /// [`CacheBackend::Custom`] never fails here.
+    pub fn new(resolver: R, cache: CacheBackend, config: ResolverConfig) -> Result<Self, Error> {
+        Ok(Self { resolver, cache: cache.into_cache()?, config })
     }
 
     /// Borrow the underlying cache (e.g. for seeding or enumeration).
-    pub fn cache(&self) -> &C {
-        &self.cache
+    pub fn cache(&self) -> &dyn Cache {
+        self.cache.as_ref()
     }
 
     /// Borrow the underlying resolver (e.g. to inspect a fake's call count in tests).
@@ -122,7 +201,7 @@ impl<R: Resolver, C: Cache> SimbadResolver<R, C> {
     /// to their standard designation first and the original `C n` bound as an
     /// alias. Never fabricates.
     pub async fn resolve(&self, query: &str) -> Result<Resolution, Error> {
-        resolve_core(&self.resolver, &self.cache, &self.config, query).await
+        resolve_core(&self.resolver, self.cache.as_ref(), &self.config, query).await
     }
 
     /// Bind a chosen canonical target as an authoritative user override, adding
@@ -149,7 +228,7 @@ impl<R: Resolver, C: Cache> SimbadResolver<R, C> {
 /// The shared cache-first resolve routine used by both the facade and the batch
 /// resolver. Caldwell-translates, checks the cache, then (if online) resolves,
 /// persists, and re-reads. Never fabricates.
-pub(crate) async fn resolve_core<R: Resolver, C: Cache>(
+pub(crate) async fn resolve_core<R: Resolver, C: Cache + ?Sized>(
     resolver: &R,
     cache: &C,
     config: &ResolverConfig,

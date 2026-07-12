@@ -169,6 +169,8 @@ fn build_identity(hit: &SesameHit, query: &str) -> ResolvedIdentity {
         otype_raw,
         ra_deg: hit.ra_deg,
         dec_deg: hit.dec_deg,
+        // Sesame is a name→position service and carries no photometry.
+        v_mag: None,
         aliases,
         source: TargetSource::Resolved,
     }
@@ -224,6 +226,7 @@ mod tests {
             otype_raw: String::new(),
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: None,
             aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
             source: TargetSource::Resolved,
         }
@@ -238,6 +241,7 @@ mod tests {
             otype_raw: "G".to_owned(),
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: Some(3.44),
             aliases: vec![
                 ResolvedAlias::new("M 31", AliasKind::Designation),
                 ResolvedAlias::new("NGC 224", AliasKind::Designation),

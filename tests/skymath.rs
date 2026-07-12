@@ -16,6 +16,7 @@ fn m31_identity(dec_deg: f64) -> ResolvedIdentity {
         otype_raw: "G".to_owned(),
         ra_deg: 10.684_708,
         dec_deg,
+        v_mag: Some(3.44),
         aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
         source: TargetSource::Resolved,
     }
@@ -47,6 +48,7 @@ fn cached_target_position_round_trips() {
         otype_raw: "G".to_owned(),
         ra_deg: 10.684_708,
         dec_deg: 41.268_75,
+        v_mag: Some(3.44),
         source: TargetSource::Resolved,
         resolved_at: "2026-07-12T00:00:00Z".to_owned(),
         aliases: vec![],

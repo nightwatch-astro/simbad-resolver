@@ -73,6 +73,10 @@ struct StoredTarget {
     otype_raw: String,
     ra_deg: f64,
     dec_deg: f64,
+    /// Johnson V magnitude when known. `#[serde(default)]` so target rows
+    /// written before this field existed still deserialize (as `None`).
+    #[serde(default)]
+    v_mag: Option<f64>,
     source: TargetSource,
     resolved_at: String,
 }
@@ -87,6 +91,7 @@ impl StoredTarget {
             otype_raw: identity.otype_raw.clone(),
             ra_deg: identity.ra_deg,
             dec_deg: identity.dec_deg,
+            v_mag: identity.v_mag,
             source: identity.source,
             resolved_at: now_iso(),
         }
@@ -102,6 +107,7 @@ impl StoredTarget {
             otype_raw: self.otype_raw,
             ra_deg: self.ra_deg,
             dec_deg: self.dec_deg,
+            v_mag: self.v_mag,
             source: self.source,
             resolved_at: self.resolved_at,
             aliases,
@@ -791,6 +797,7 @@ mod tests {
             otype_raw: "G".to_owned(),
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: Some(3.44),
             aliases: vec![
                 ResolvedAlias::new("M 31", AliasKind::Designation),
                 ResolvedAlias::new("NGC 224", AliasKind::Designation),

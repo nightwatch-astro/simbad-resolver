@@ -7,6 +7,7 @@
 //! most once per [`BatchResolver::drain`] call.
 
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use crate::cache::{Cache, Queue};
 use crate::{
@@ -27,19 +28,27 @@ pub struct DrainSummary {
     pub still_pending: usize,
 }
 
-/// The async batch resolver. Generic over any resolver, cache, and queue.
-pub struct BatchResolver<R: Resolver, C: Cache, Q: Queue> {
+/// The async batch resolver. Generic over any [`Resolver`]; the cache and queue
+/// backends are type-erased so the type does not carry them.
+pub struct BatchResolver<R: Resolver> {
     resolver: R,
-    cache: C,
-    queue: Q,
+    cache: Arc<dyn Cache>,
+    queue: Arc<dyn Queue>,
     config: ResolverConfig,
     batch_size: usize,
 }
 
-impl<R: Resolver, C: Cache, Q: Queue> BatchResolver<R, C, Q> {
-    /// Construct a batch resolver.
-    pub fn new(resolver: R, cache: C, queue: Q, config: ResolverConfig) -> Self {
-        Self { resolver, cache, queue, config, batch_size: 16 }
+impl<R: Resolver> BatchResolver<R> {
+    /// Construct a batch resolver from caller-supplied cache and queue backends
+    /// — typically a [`Store`](crate::Store)'s `.cache()` and `.queue()` over
+    /// one shared database.
+    pub fn new(
+        resolver: R,
+        cache: impl Cache + 'static,
+        queue: impl Queue + 'static,
+        config: ResolverConfig,
+    ) -> Self {
+        Self { resolver, cache: Arc::new(cache), queue: Arc::new(queue), config, batch_size: 16 }
     }
 
     /// Set how many pending items are claimed per round (min 1).
@@ -50,8 +59,8 @@ impl<R: Resolver, C: Cache, Q: Queue> BatchResolver<R, C, Q> {
     }
 
     /// Borrow the underlying queue.
-    pub fn queue(&self) -> &Q {
-        &self.queue
+    pub fn queue(&self) -> &dyn Queue {
+        self.queue.as_ref()
     }
 
     /// Enqueue an identifier keyed by an opaque caller id (idempotent).
@@ -76,7 +85,9 @@ impl<R: Resolver, C: Cache, Q: Queue> BatchResolver<R, C, Q> {
             }
             for item in fresh {
                 seen.insert(item.id.clone());
-                match resolve_core(&self.resolver, &self.cache, &self.config, &item.query).await? {
+                match resolve_core(&self.resolver, self.cache.as_ref(), &self.config, &item.query)
+                    .await?
+                {
                     Resolution::Resolved(target) => {
                         self.queue.mark_resolved(&item.id, target.id).await?;
                         summary.resolved += 1;

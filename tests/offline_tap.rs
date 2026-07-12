@@ -15,23 +15,24 @@ use wiremock::{Mock, MockServer, ResponseTemplate};
 const UA: &str = "simbad-resolver-test/9.9";
 
 /// First round-trip (`basic ⋈ ident`) with one matching object.
-const M31_BASIC_TSV: &str = "oid\tmain_id\tra\tdec\totype_txt\n\
-    1575544\t\"M  31\"\t10.6847083\t41.26875\t\"G\"\n";
+const M31_BASIC_TSV: &str = "oid\tmain_id\tra\tdec\totype_txt\tV\n\
+    1575544\t\"M  31\"\t10.6847083\t41.26875\t\"G\"\t3.44\n";
 /// First round-trip with two distinct physical objects → ambiguous.
-const AMBIGUOUS_BASIC_TSV: &str = "oid\tmain_id\tra\tdec\totype_txt\n\
-    1575544\t\"M  31\"\t10.6847083\t41.26875\t\"G\"\n\
-    999999\t\"Some Other\"\t11.0\t42.0\t\"G\"\n";
+const AMBIGUOUS_BASIC_TSV: &str = "oid\tmain_id\tra\tdec\totype_txt\tV\n\
+    1575544\t\"M  31\"\t10.6847083\t41.26875\t\"G\"\t3.44\n\
+    999999\t\"Some Other\"\t11.0\t42.0\t\"G\"\t\n";
 /// First round-trip with header only → no object.
-const EMPTY_BASIC_TSV: &str = "oid\tmain_id\tra\tdec\totype_txt\n";
+const EMPTY_BASIC_TSV: &str = "oid\tmain_id\tra\tdec\totype_txt\tV\n";
 /// Second round-trip (`ident` for the winning oid) → alias set.
 const M31_ALIAS_TSV: &str = "id\n\
     \"M   31\"\n\
     \"NGC  224\"\n\
     \"NAME Andromeda Galaxy\"\n";
-/// Cone-search response, already ordered nearest-first by the server.
-const POSITION_TSV: &str = "oid\tmain_id\tra\tdec\totype_txt\tdist\n\
-    1575544\t\"M  31\"\t10.6847083\t41.26875\t\"G\"\t0.001\n\
-    222\t\"NGC 206\"\t10.9\t40.7\t\"OpC\"\t0.6\n";
+/// Cone-search response, already ordered nearest-first by the server. NGC 206
+/// (an open cluster) has no V mag → empty trailing V column before `dist`.
+const POSITION_TSV: &str = "oid\tmain_id\tra\tdec\totype_txt\tV\tdist\n\
+    1575544\t\"M  31\"\t10.6847083\t41.26875\t\"G\"\t3.44\t0.001\n\
+    222\t\"NGC 206\"\t10.9\t40.7\t\"OpC\"\t\t0.6\n";
 /// A TAP error returned as a VOTable body under HTTP 200.
 const VOTABLE_ERROR_BODY: &str =
     "<VOTABLE version=\"1.4\"><RESOURCE><INFO name=\"QUERY_STATUS\" value=\"ERROR\">\
@@ -81,6 +82,7 @@ async fn resolve_single_object_returns_full_identity() {
     assert_eq!(identity.object_type, ObjectType::Galaxy);
     assert!((identity.ra_deg - 10.684_708_3).abs() < 1e-6);
     assert!((identity.dec_deg - 41.268_75).abs() < 1e-6);
+    assert_eq!(identity.v_mag, Some(3.44), "V mag enriched from the allfluxes join");
     assert_eq!(identity.common_name.as_deref(), Some("Andromeda Galaxy"));
     assert!(identity.aliases.iter().any(|a| a.alias == "NGC 224"));
     assert!(identity.aliases.iter().any(|a| a.alias == "M 31"));
@@ -181,8 +183,10 @@ async fn resolve_position_returns_matches_ordered_nearest_first() {
 
     assert_eq!(matches.len(), 2);
     assert_eq!(matches[0].identity.simbad_oid, Some(1_575_544));
+    assert_eq!(matches[0].identity.v_mag, Some(3.44), "cone hit carries V mag");
     assert!((matches[0].separation_deg - 0.001).abs() < 1e-9);
     assert!(matches[0].separation_deg <= matches[1].separation_deg);
     // A cone hit carries its primary designation as its sole alias.
     assert!(matches[1].identity.aliases.iter().any(|a| a.alias == "NGC 206"));
+    assert_eq!(matches[1].identity.v_mag, None, "NGC 206 has no V photometry");
 }

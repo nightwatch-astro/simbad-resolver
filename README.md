@@ -10,7 +10,8 @@ and sky positions to canonical target identities using SIMBAD.
 Given an input such as `M31`, `NGC 224`, `Andromeda Galaxy`, `C 14`, or a sky
 position, `simbad-resolver` queries SIMBAD and returns a single canonical
 identity: a stable id, ICRS J2000 coordinates, an object-type classification,
-the object's alias set, and the provenance of the record. Resolved identities
+a Johnson V magnitude when SIMBAD has one (`v_mag`, `None` otherwise), the
+object's alias set, and the provenance of the record. Resolved identities
 are stored in a pluggable cache, so repeated lookups are served locally instead
 of re-querying SIMBAD, and an async batch resolver processes many names against
 a durable queue.
@@ -32,8 +33,9 @@ cargo doc --open
 Two SIMBAD backends are available, both built in:
 
 - **`TapResolver`** queries the SIMBAD TAP service with ADQL. It returns SIMBAD
-  object ids, object types, the full alias set, and supports cone search by
-  position.
+  object ids, object types, the full alias set, a Johnson V magnitude (via a
+  `LEFT OUTER JOIN` on `allfluxes`, `None` when the object has no V photometry),
+  and supports cone search by position.
 - **`SesameResolver`** queries the CDS Sesame name resolver, which aggregates
   SIMBAD, NED, and VizieR. It resolves a broader range of names but returns
   coordinates and a primary designation only; object type and aliases can be
@@ -41,14 +43,22 @@ Two SIMBAD backends are available, both built in:
 
 ## Storage
 
-The `Cache` and `Queue` traits are the persistence abstraction; bring your own
-implementation, or use the built-in `Store`, backed by
+The facade selects its cache with a `CacheBackend`, chosen at construction —
+there is no separate "enable caching" step, because the cache is load-bearing
+(resolve returns cached rows). The built-in backend is
 [redb](https://crates.io/crates/redb) (a pure-Rust embedded ACID store):
 
-- `Store::open(path)` — durable, file-backed; survives restarts.
-- `Store::in_memory()` — ephemeral, nothing written to disk.
+- `CacheBackend::InMemory` — ephemeral, nothing written to disk (also `Default`).
+- `CacheBackend::file("targets.redb")` — durable, file-backed; survives restarts.
+- `CacheBackend::custom(my_cache)` — any `Cache` implementation you supply.
 
-Both expose `.cache()` and `.queue()` handles over the same database.
+For an uncached one-shot lookup, call a bare `Resolver` (e.g. `TapResolver`)
+directly instead of the facade.
+
+Under the hood the built-in variants open a `Store` (still public: `Store::open`
+/ `Store::in_memory`, each exposing `.cache()` and `.queue()` over one database)
+— use it directly to share a single database between a `SimbadResolver` and a
+`BatchResolver`, or to tune the backend.
 
 ## Coordinates
 
@@ -69,12 +79,13 @@ fields remain the source of truth.
 ## Usage
 
 ```rust
-use simbad_resolver::{Resolution, ResolverConfig, SimbadResolver, Store, TapResolver};
+use simbad_resolver::{CacheBackend, Resolution, ResolverConfig, SimbadResolver, TapResolver};
 
 # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 let resolver = TapResolver::with_defaults()?;
-let store = Store::in_memory()?; // or Store::open("targets.redb")?
-let facade = SimbadResolver::new(resolver, store.cache(), ResolverConfig::new("your.namespace"));
+// Ephemeral cache; `CacheBackend::file("targets.redb")` persists across restarts.
+let facade =
+    SimbadResolver::new(resolver, CacheBackend::InMemory, ResolverConfig::new("your.namespace"))?;
 
 match facade.resolve("M31").await? {
     Resolution::Resolved(target) => {

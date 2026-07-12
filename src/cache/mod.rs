@@ -37,6 +37,8 @@ pub struct CachedTarget {
     pub ra_deg: f64,
     /// ICRS J2000 declination, decimal degrees.
     pub dec_deg: f64,
+    /// Johnson V-band apparent magnitude (SIMBAD `allfluxes.V`) when known.
+    pub v_mag: Option<f64>,
     /// Provenance of the stored identity.
     pub source: TargetSource,
     /// RFC 3339 timestamp of the last seed/resolve/override.
@@ -57,6 +59,7 @@ impl CachedTarget {
             otype_raw: self.otype_raw.clone(),
             ra_deg: self.ra_deg,
             dec_deg: self.dec_deg,
+            v_mag: self.v_mag,
             aliases: self.aliases.clone(),
             source: self.source,
         }
@@ -300,6 +303,7 @@ mod tests {
             otype_raw: "G".to_owned(),
             ra_deg: 10.684_708,
             dec_deg: 41.268_75,
+            v_mag: Some(3.44),
             source: TargetSource::Resolved,
             resolved_at: "2026-07-11T00:00:00Z".to_owned(),
             aliases: vec![ResolvedAlias::new("NGC 224", AliasKind::Designation)],
@@ -311,6 +315,7 @@ mod tests {
         assert_eq!(identity.common_name.as_deref(), Some("Andromeda Galaxy"));
         assert_eq!(identity.object_type, ObjectType::Galaxy);
         assert_eq!(identity.otype_raw, "G");
+        assert_eq!(identity.v_mag, Some(3.44));
         assert!((identity.ra_deg - 10.684_708).abs() < f64::EPSILON);
         assert_eq!(identity.source, TargetSource::Resolved);
         assert_eq!(identity.aliases, target.aliases);
