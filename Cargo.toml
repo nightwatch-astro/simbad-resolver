@@ -1,8 +1,8 @@
 # simbad-resolver — single-crate SIMBAD astronomical target resolver.
 #
-# A generic, embeddable library that resolves astronomical names, designations,
-# and positions to canonical identities via SIMBAD, with a pluggable redb-backed
-# cache/queue (see docs/adr/0001-stack-and-architecture.md).
+# A generic library that resolves astronomical names, designations, and
+# positions to canonical identities via SIMBAD, with a pluggable redb-backed
+# cache/queue (see docs/adr/0002-single-crate.md).
 [package]
 name = "simbad-resolver"
 version = "0.1.1"
