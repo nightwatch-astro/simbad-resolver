@@ -23,15 +23,16 @@ jobs:
       # other workflows, so CI would never run on the release PR. An App token
       # lets the release PR fire the CI workflow (unit tests) like any other PR.
       - name: Mint sjorsr-release-bot app token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         id: app-token
         with:
           # App client id is stored as a repo/org variable; the PEM key as a secret.
-          app-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
+          # v3.1 deprecated `app-id` in favour of `client-id` (we store a client id).
+          client-id: ${{ vars.RELEASE_APP_CLIENT_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Run release-please
-        uses: googleapis/release-please-action@v4
+        uses: googleapis/release-please-action@v5
         id: release
         with:
           token: ${{ steps.app-token.outputs.token }}
@@ -49,7 +50,7 @@ jobs:
       contents: read
       id-token: write # required for the OIDC token exchange
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
