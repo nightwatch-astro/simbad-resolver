@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.2.0...simbad-resolver-v0.2.1) (2026-07-13)
+
+
+### Documentation
+
+* rewrite anthropomorphic error contracts, cover all capabilities, add guide ([#15](https://github.com/nightwatch-astro/simbad-resolver/issues/15)) ([f65b494](https://github.com/nightwatch-astro/simbad-resolver/commit/f65b494dc1919fcf94399b113d455760b6d3a58e))
+
 ## [0.2.0](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.1.3...simbad-resolver-v0.2.0) (2026-07-12)
 
 
