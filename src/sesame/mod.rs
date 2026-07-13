@@ -30,6 +30,9 @@ pub const DEFAULT_SESAME_ENDPOINT: &str = "https://cds.unistra.fr/cgi-bin/nph-se
 
 /// Build a [`SimbadConfig`] defaulted to the CDS Sesame endpoint (10s timeout,
 /// shared `simbad-resolver` user agent) instead of the default TAP endpoint.
+///
+/// Crate-internal (the `sesame` module is private); used by
+/// [`SesameResolver::new`], which is the public entry point.
 #[must_use]
 pub fn default_sesame_config() -> SimbadConfig {
     SimbadConfig { endpoint: DEFAULT_SESAME_ENDPOINT.to_owned(), ..SimbadConfig::default() }
@@ -74,6 +77,15 @@ pub struct SesameResolver {
 
 impl SesameResolver {
     /// Build a resolver against the default CDS Sesame endpoint.
+    ///
+    /// Only builds the HTTP client — no request is sent, so this is runnable.
+    ///
+    /// ```
+    /// use simbad_resolver::SesameResolver;
+    ///
+    /// let resolver = SesameResolver::new();
+    /// # let _ = resolver;
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::with_config(default_sesame_config())
@@ -81,6 +93,20 @@ impl SesameResolver {
 
     /// Build a resolver against a caller-supplied config (custom endpoint,
     /// timeout, or user agent).
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use simbad_resolver::{SesameResolver, SimbadConfig};
+    ///
+    /// let config = SimbadConfig {
+    ///     endpoint: "https://example.test/sesame?".to_owned(),
+    ///     timeout: Duration::from_secs(5),
+    ///     ..SimbadConfig::default()
+    /// };
+    /// let resolver = SesameResolver::with_config(config);
+    /// # let _ = resolver;
+    /// ```
     #[must_use]
     pub fn with_config(config: SimbadConfig) -> Self {
         let client = reqwest::Client::builder()
@@ -103,6 +129,18 @@ impl SesameResolver {
     /// hit's primary designation through `enricher`; a successful enrichment
     /// replaces the coarse identity (object type + full alias set), a failed
     /// one falls back to the coarse Sesame identity.
+    ///
+    /// ```
+    /// use std::sync::Arc;
+    ///
+    /// use simbad_resolver::{Resolver, SesameResolver, TapResolver};
+    ///
+    /// # fn run() -> Result<(), simbad_resolver::ResolveError> {
+    /// let enricher: Arc<dyn Resolver> = Arc::new(TapResolver::with_defaults()?);
+    /// let resolver = SesameResolver::new().with_enricher(enricher);
+    /// # let _ = resolver;
+    /// # Ok(()) }
+    /// ```
     #[must_use]
     pub fn with_enricher(mut self, enricher: Arc<dyn Resolver>) -> Self {
         self.enricher = Some(enricher);

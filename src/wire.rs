@@ -8,6 +8,13 @@
 
 /// Strip SIMBAD's surrounding double quotes (TSV string columns are quoted)
 /// and outer whitespace.
+///
+/// ```
+/// use simbad_resolver::wire::unquote;
+///
+/// assert_eq!(unquote("\"M 31\""), "M 31");
+/// assert_eq!(unquote("  12345  "), "12345");
+/// ```
 #[must_use]
 pub fn unquote(s: &str) -> String {
     s.trim().trim_matches('"').to_owned()
@@ -15,6 +22,13 @@ pub fn unquote(s: &str) -> String {
 
 /// Collapse internal whitespace runs to single spaces and trim
 /// (e.g. SIMBAD `"M   31"` → `"M 31"`, `"NGC  224"` → `"NGC 224"`).
+///
+/// ```
+/// use simbad_resolver::wire::collapse_spaces;
+///
+/// assert_eq!(collapse_spaces("M   31"), "M 31");
+/// assert_eq!(collapse_spaces("  NGC  224 "), "NGC 224");
+/// ```
 #[must_use]
 pub fn collapse_spaces(s: &str) -> String {
     s.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -31,6 +45,18 @@ pub fn collapse_spaces(s: &str) -> String {
 /// with no V photometry (a `LEFT OUTER JOIN allfluxes` miss), which parses to
 /// `v_mag = None`. A non-empty but unparsable/non-finite V also degrades to
 /// `None` — magnitude is non-critical and never drops the whole row.
+///
+/// ```
+/// use simbad_resolver::wire::parse_basic_row;
+///
+/// let line = "1575544\t\"M  31\"\t10.6847083\t41.26875\t\"G\"\t3.44";
+/// let (oid, main_id, ra, dec, otype, v_mag) = parse_basic_row(line).unwrap();
+/// assert_eq!(oid, 1_575_544);
+/// assert_eq!(main_id, "M  31"); // internal whitespace is not collapsed here
+/// assert_eq!(otype, "G");
+/// assert_eq!(v_mag, Some(3.44));
+/// # let _ = (ra, dec);
+/// ```
 #[must_use]
 pub fn parse_basic_row(line: &str) -> Option<(i64, String, f64, f64, String, Option<f64>)> {
     let fields: Vec<&str> = line.split('\t').collect();
@@ -55,6 +81,14 @@ pub fn parse_basic_row(line: &str) -> Option<(i64, String, f64, f64, String, Opt
 
 /// Parse an optional magnitude TSV field: empty → `None`; otherwise a finite
 /// `f64` → `Some`, or `None` if unparsable/non-finite.
+///
+/// ```
+/// use simbad_resolver::wire::parse_optional_mag;
+///
+/// assert_eq!(parse_optional_mag("3.44"), Some(3.44));
+/// assert_eq!(parse_optional_mag(""), None); // LEFT OUTER JOIN miss: no V photometry
+/// assert_eq!(parse_optional_mag("~"), None); // unparsable degrades to None, not an error
+/// ```
 #[must_use]
 pub fn parse_optional_mag(field: &str) -> Option<f64> {
     let s = unquote(field);

@@ -11,6 +11,14 @@ use serde::{Deserialize, Serialize};
 /// to [`ObjectType::Other`] (see [`map_otype`]); the raw string is preserved
 /// separately on [`ResolvedIdentity::otype_raw`] for consumers needing finer
 /// types.
+///
+/// ```
+/// use simbad_resolver::ObjectType;
+///
+/// assert_eq!(ObjectType::Galaxy.as_wire(), "galaxy");
+/// assert_eq!(ObjectType::from_wire("planetary_nebula"), ObjectType::PlanetaryNebula);
+/// assert_eq!(ObjectType::from_wire("bogus"), ObjectType::Other); // unknown → Other
+/// ```
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ObjectType {
@@ -42,6 +50,12 @@ pub enum ObjectType {
 
 impl ObjectType {
     /// The `snake_case` wire/DB string for this object type.
+    ///
+    /// ```
+    /// use simbad_resolver::ObjectType;
+    ///
+    /// assert_eq!(ObjectType::GalaxyCluster.as_wire(), "galaxy_cluster");
+    /// ```
     #[must_use]
     pub fn as_wire(self) -> &'static str {
         match self {
@@ -62,6 +76,13 @@ impl ObjectType {
 
     /// Parse a wire/DB string into an [`ObjectType`]. Unknown strings map to
     /// [`ObjectType::Other`] (closed enum, forward-compatible read).
+    ///
+    /// ```
+    /// use simbad_resolver::ObjectType;
+    ///
+    /// assert_eq!(ObjectType::from_wire("globular_cluster"), ObjectType::GlobularCluster);
+    /// assert_eq!(ObjectType::from_wire("not-a-real-type"), ObjectType::Other);
+    /// ```
     #[must_use]
     pub fn from_wire(s: &str) -> Self {
         match s {
@@ -92,6 +113,14 @@ impl ObjectType {
 /// The recognised codes follow the SIMBAD object-type vocabulary
 /// (<https://simbad.cds.unistra.fr/guide/otypes.htx>); the long-form labels
 /// SIMBAD also emits are accepted as aliases for robustness.
+///
+/// ```
+/// use simbad_resolver::{map_otype, ObjectType};
+///
+/// assert_eq!(map_otype("G"), ObjectType::Galaxy);
+/// assert_eq!(map_otype("HII"), ObjectType::EmissionNebula);
+/// assert_eq!(map_otype("*"), ObjectType::Other); // a plain star falls outside the closed set
+/// ```
 #[must_use]
 pub fn map_otype(otype: &str) -> ObjectType {
     match otype.trim() {
@@ -129,6 +158,15 @@ pub fn map_otype(otype: &str) -> ObjectType {
 ///
 /// The `UserOverride` variant serializes with the hyphenated `user-override`
 /// wire/DB value.
+///
+/// ```
+/// use simbad_resolver::TargetSource;
+///
+/// // A `user-override` row is sticky: nothing lower-precedence may overwrite it.
+/// assert!(TargetSource::UserOverride.may_overwrite(TargetSource::Resolved));
+/// assert!(!TargetSource::Resolved.may_overwrite(TargetSource::UserOverride));
+/// assert_eq!(TargetSource::UserOverride.as_wire(), "user-override");
+/// ```
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TargetSource {
@@ -144,6 +182,13 @@ pub enum TargetSource {
 impl TargetSource {
     /// The wire/DB string for this source (`UserOverride` is the hyphenated
     /// `user-override`).
+    ///
+    /// ```
+    /// use simbad_resolver::TargetSource;
+    ///
+    /// assert_eq!(TargetSource::UserOverride.as_wire(), "user-override");
+    /// assert_eq!(TargetSource::Seed.as_wire(), "seed");
+    /// ```
     #[must_use]
     pub fn as_wire(self) -> &'static str {
         match self {
@@ -155,6 +200,13 @@ impl TargetSource {
 
     /// Parse a wire/DB string into a [`TargetSource`]. Returns `None` for an
     /// unrecognised value.
+    ///
+    /// ```
+    /// use simbad_resolver::TargetSource;
+    ///
+    /// assert_eq!(TargetSource::from_wire("user-override"), Some(TargetSource::UserOverride));
+    /// assert_eq!(TargetSource::from_wire("bogus"), None);
+    /// ```
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
@@ -167,6 +219,13 @@ impl TargetSource {
 
     /// Source precedence rank for conflicting writes: higher wins.
     /// `user-override` (2) > `resolved` (1) > `seed` (0).
+    ///
+    /// ```
+    /// use simbad_resolver::TargetSource;
+    ///
+    /// assert!(TargetSource::UserOverride.precedence() > TargetSource::Resolved.precedence());
+    /// assert!(TargetSource::Resolved.precedence() > TargetSource::Seed.precedence());
+    /// ```
     #[must_use]
     pub fn precedence(self) -> u8 {
         match self {
@@ -182,6 +241,15 @@ impl TargetSource {
     /// A `user-override` row is sticky: a later `resolved`/`seed` result MUST
     /// NOT overwrite it. An equal-or-higher-precedence incoming source wins
     /// (re-resolving refreshes a `resolved` row; an override always wins).
+    ///
+    /// This is what [`crate::Cache::upsert`] implementations must honour.
+    ///
+    /// ```
+    /// use simbad_resolver::TargetSource;
+    ///
+    /// assert!(TargetSource::Resolved.may_overwrite(TargetSource::Seed));
+    /// assert!(!TargetSource::Seed.may_overwrite(TargetSource::UserOverride));
+    /// ```
     #[must_use]
     pub fn may_overwrite(self, existing: Self) -> bool {
         self.precedence() >= existing.precedence()
@@ -191,6 +259,14 @@ impl TargetSource {
 // ── AliasKind / ResolvedAlias ─────────────────────────────────────────────────
 
 /// The kind of an alias attached to a resolved identity.
+///
+/// ```
+/// use simbad_resolver::AliasKind;
+///
+/// assert_eq!(AliasKind::CommonName.as_wire(), "common_name");
+/// assert_eq!(AliasKind::from_wire("user"), AliasKind::User);
+/// assert_eq!(AliasKind::from_wire("bogus"), AliasKind::Designation); // unrecognised → Designation
+/// ```
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AliasKind {
@@ -204,6 +280,12 @@ pub enum AliasKind {
 
 impl AliasKind {
     /// The wire/DB string (matches the `target_alias.kind` CHECK constraint).
+    ///
+    /// ```
+    /// use simbad_resolver::AliasKind;
+    ///
+    /// assert_eq!(AliasKind::Designation.as_wire(), "designation");
+    /// ```
     #[must_use]
     pub fn as_wire(self) -> &'static str {
         match self {
@@ -214,6 +296,12 @@ impl AliasKind {
     }
 
     /// Parse a wire/DB string into an [`AliasKind`]; unknown → `Designation`.
+    ///
+    /// ```
+    /// use simbad_resolver::AliasKind;
+    ///
+    /// assert_eq!(AliasKind::from_wire("common_name"), AliasKind::CommonName);
+    /// ```
     #[must_use]
     pub fn from_wire(s: &str) -> Self {
         match s {
@@ -238,6 +326,14 @@ pub struct ResolvedAlias {
 
 impl ResolvedAlias {
     /// Build a [`ResolvedAlias`], computing the normalized form from `alias`.
+    ///
+    /// ```
+    /// use simbad_resolver::{AliasKind, ResolvedAlias};
+    ///
+    /// let alias = ResolvedAlias::new("M31", AliasKind::Designation);
+    /// assert_eq!(alias.alias, "M31");
+    /// assert_eq!(alias.normalized, "m 31");
+    /// ```
     #[must_use]
     pub fn new(alias: impl Into<String>, kind: AliasKind) -> Self {
         let alias = alias.into();
@@ -315,6 +411,23 @@ impl ResolvedIdentity {
     ///
     /// `skymath::Error::OutOfRange` if the stored values are outside RA
     /// `[0, 360)` / Dec `[-90, +90]` (malformed cache content).
+    ///
+    /// See the [struct-level example](Self) for a full identity literal; this
+    /// one only shows the accessor:
+    ///
+    /// ```
+    /// # use simbad_resolver::{AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource};
+    /// # let m31 = ResolvedIdentity {
+    /// #     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    /// #     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    /// #     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    /// #     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    /// #     source: TargetSource::Resolved,
+    /// # };
+    /// let eq = m31.position()?;
+    /// assert!((eq.ra().degrees() - 10.684_708).abs() < 1e-6);
+    /// # Ok::<(), skymath::Error>(())
+    /// ```
     pub fn position(&self) -> skymath::Result<skymath::Equatorial> {
         skymath::Equatorial::j2000(
             skymath::Angle::from_degrees(self.ra_deg),
@@ -341,6 +454,23 @@ impl PositionMatch {
     ///
     /// `skymath::Error::OutOfRange` if the identity's stored coordinates are out
     /// of range.
+    ///
+    /// ```
+    /// use simbad_resolver::{AliasKind, ObjectType, PositionMatch, ResolvedAlias, ResolvedIdentity, TargetSource};
+    ///
+    /// # fn run() -> Result<(), skymath::Error> {
+    /// let identity = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Resolved,
+    /// };
+    /// let m = PositionMatch { identity, separation_deg: 0.001 };
+    /// let eq = m.position()?;
+    /// assert!((eq.dec().degrees() - 41.268_75).abs() < 1e-6);
+    /// # Ok(()) }
+    /// ```
     pub fn position(&self) -> skymath::Result<skymath::Equatorial> {
         self.identity.position()
     }

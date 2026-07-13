@@ -18,8 +18,9 @@ categories = ["science", "api-bindings"]
 # Ship only the crate itself — not the repo's agentic tooling / planning docs.
 # Cargo.toml, Cargo.lock, LICENSE and README are picked up regardless; this
 # whitelist keeps everything else (.specify/, .claude/, specs/, HANDOVER.md, …)
-# out of the published package.
-include = ["/src/**/*", "/tests/**/*", "/README.md", "/LICENSE"]
+# out of the published package. `/docs/**/*` is required: `src/lib.rs` pulls
+# `docs/guide.md` in via `include_str!`, so it must ship in the sdist too.
+include = ["/src/**/*", "/tests/**/*", "/docs/**/*", "/README.md", "/LICENSE"]
 
 # Build the documentation on docs.rs with every feature enabled.
 [package.metadata.docs.rs]

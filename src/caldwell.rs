@@ -144,6 +144,14 @@ const CALDWELL: &[(u16, Option<&str>)] = &[
 /// no single resolvable catalog designation (e.g. C99, the Coalsack). Callers
 /// translate a Caldwell query (`C 14`, `Caldwell 14`) to the returned
 /// designation and then resolve / enrich it normally.
+///
+/// ```
+/// use simbad_resolver::caldwell::caldwell_to_designation;
+///
+/// assert_eq!(caldwell_to_designation(14), Some("NGC 869")); // Double Cluster
+/// assert_eq!(caldwell_to_designation(99), None); // Coalsack: no NGC/IC designation
+/// assert_eq!(caldwell_to_designation(0), None); // out of range
+/// ```
 #[must_use]
 pub fn caldwell_to_designation(n: u16) -> Option<&'static str> {
     // CALDWELL is dense and contiguous from index 0 = C1; index directly when
@@ -155,6 +163,12 @@ pub fn caldwell_to_designation(n: u16) -> Option<&'static str> {
 }
 
 /// Total number of committed Caldwell entries (C1–C109 = 109).
+///
+/// ```
+/// use simbad_resolver::caldwell::entry_count;
+///
+/// assert_eq!(entry_count(), 109);
+/// ```
 #[must_use]
 pub fn entry_count() -> usize {
     CALDWELL.len()
@@ -169,6 +183,15 @@ pub fn entry_count() -> usize {
 /// and a number. Trailing tokens (e.g. `"C 14 extra"`) are rejected so only
 /// bare designations match — a query with extra descriptive words is not a
 /// Caldwell designation.
+///
+/// ```
+/// use simbad_resolver::caldwell::parse_caldwell_number;
+///
+/// assert_eq!(parse_caldwell_number("C14"), Some(14));
+/// assert_eq!(parse_caldwell_number("Caldwell 14"), Some(14));
+/// assert_eq!(parse_caldwell_number("M 31"), None); // not a Caldwell designation
+/// assert_eq!(parse_caldwell_number("C 14 extra"), None); // trailing tokens rejected
+/// ```
 #[must_use]
 pub fn parse_caldwell_number(query: &str) -> Option<u16> {
     let norm = normalize(query);

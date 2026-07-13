@@ -80,6 +80,17 @@ impl<R: Resolver> BatchResolver<R> {
     /// Construct a batch resolver from caller-supplied cache and queue backends
     /// — typically a [`Store`](crate::Store)'s `.cache()` and `.queue()` over
     /// one shared database.
+    ///
+    /// ```
+    /// use simbad_resolver::{BatchResolver, OfflineResolver, ResolverConfig, Store};
+    ///
+    /// # fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// let batch =
+    ///     BatchResolver::new(OfflineResolver, store.cache(), store.queue(), ResolverConfig::new("x"));
+    /// # let _ = batch;
+    /// # Ok(()) }
+    /// ```
     pub fn new(
         resolver: R,
         cache: impl Cache + 'static,
@@ -90,6 +101,18 @@ impl<R: Resolver> BatchResolver<R> {
     }
 
     /// Set how many pending items are claimed per round (min 1).
+    ///
+    /// ```
+    /// use simbad_resolver::{BatchResolver, OfflineResolver, ResolverConfig, Store};
+    ///
+    /// # fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// let batch =
+    ///     BatchResolver::new(OfflineResolver, store.cache(), store.queue(), ResolverConfig::new("x"))
+    ///         .with_batch_size(0); // clamped to 1
+    /// # let _ = batch;
+    /// # Ok(()) }
+    /// ```
     #[must_use]
     pub fn with_batch_size(mut self, n: usize) -> Self {
         self.batch_size = n.max(1);
@@ -97,11 +120,35 @@ impl<R: Resolver> BatchResolver<R> {
     }
 
     /// Borrow the underlying queue.
+    ///
+    /// ```
+    /// use simbad_resolver::{BatchResolver, OfflineResolver, ResolverConfig, Store};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// let batch =
+    ///     BatchResolver::new(OfflineResolver, store.cache(), store.queue(), ResolverConfig::new("x"));
+    /// assert_eq!(batch.queue().pending_count().await?, 0);
+    /// # Ok(()) }
+    /// ```
     pub fn queue(&self) -> &dyn Queue {
         self.queue.as_ref()
     }
 
     /// Enqueue an identifier keyed by an opaque caller id (idempotent).
+    ///
+    /// ```
+    /// use simbad_resolver::{BatchResolver, OfflineResolver, ResolverConfig, Store};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// let batch =
+    ///     BatchResolver::new(OfflineResolver, store.cache(), store.queue(), ResolverConfig::new("x"));
+    /// batch.enqueue("job-1", "M31").await?;
+    /// batch.enqueue("job-1", "M31").await?; // idempotent: still one pending item
+    /// assert_eq!(batch.queue().pending_count().await?, 1);
+    /// # Ok(()) }
+    /// ```
     pub async fn enqueue(&self, id: &str, query: &str) -> Result<(), Error> {
         self.queue.enqueue(id, query).await?;
         Ok(())
@@ -112,6 +159,23 @@ impl<R: Resolver> BatchResolver<R> {
     /// failure. Returns a [`DrainSummary`]. Terminates once every currently
     /// pending item has been processed (transiently-failed items are retried on
     /// a subsequent call).
+    ///
+    /// See the [struct-level example](Self) for a full seed-then-drain walkthrough.
+    ///
+    /// ```
+    /// use simbad_resolver::{BatchResolver, OfflineResolver, ResolverConfig, Store};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// let batch =
+    ///     BatchResolver::new(OfflineResolver, store.cache(), store.queue(), ResolverConfig::new("x"));
+    /// batch.enqueue("job-1", "does-not-exist").await?;
+    ///
+    /// // OfflineResolver reports `Disabled` (transient), so the item stays pending.
+    /// let summary = batch.drain().await?;
+    /// assert_eq!(summary.still_pending, 1);
+    /// # Ok(()) }
+    /// ```
     pub async fn drain(&self) -> Result<DrainSummary, Error> {
         let mut summary = DrainSummary::default();
         let mut seen: HashSet<String> = HashSet::new();

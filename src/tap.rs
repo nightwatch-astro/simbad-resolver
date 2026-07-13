@@ -77,6 +77,19 @@ impl TapResolver {
     /// Returns [`ResolveError::Network`] if `config.endpoint` is not a valid
     /// URL, or if the underlying `reqwest` client cannot be built (e.g. TLS
     /// backend init failure).
+    ///
+    /// Only builds the HTTP client and parses the endpoint URL — no request is
+    /// sent, so this is runnable.
+    ///
+    /// ```
+    /// use simbad_resolver::{SimbadConfig, TapResolver};
+    ///
+    /// let config =
+    ///     SimbadConfig { endpoint: "https://example.test/tap".to_owned(), ..SimbadConfig::default() };
+    /// let resolver = TapResolver::new(&config)?;
+    /// # let _ = resolver;
+    /// # Ok::<(), simbad_resolver::ResolveError>(())
+    /// ```
     pub fn new(config: &SimbadConfig) -> Result<Self, ResolveError> {
         let endpoint = url::Url::parse(&config.endpoint).map_err(|e| {
             ResolveError::Network(format!("invalid TAP endpoint {:?}: {e}", config.endpoint))
@@ -94,6 +107,14 @@ impl TapResolver {
     /// # Errors
     ///
     /// Returns [`ResolveError::Network`] if the client cannot be built.
+    ///
+    /// ```
+    /// use simbad_resolver::TapResolver;
+    ///
+    /// let resolver = TapResolver::with_defaults()?;
+    /// # let _ = resolver;
+    /// # Ok::<(), simbad_resolver::ResolveError>(())
+    /// ```
     pub fn with_defaults() -> Result<Self, ResolveError> {
         Self::new(&SimbadConfig::default())
     }
