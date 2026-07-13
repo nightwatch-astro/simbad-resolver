@@ -106,17 +106,37 @@ match facade.resolve("M31").await? {
 `cargo run --example resolve_offline`.
 
 With the `test-util` feature enabled, `FakeResolver` gives the same result
-without touching the cache directly:
+without touching the cache directly — it stands in for the resolver, so
+`resolve` reaches it on the cache miss instead of the network:
 
-```rust,ignore
-use simbad_resolver::{CacheBackend, FakeResolver, Resolution, ResolverConfig, SimbadResolver};
+```rust
+use simbad_resolver::{
+    AliasKind, CacheBackend, FakeResolver, ObjectType, Resolution, ResolvedAlias, ResolvedIdentity,
+    ResolverConfig, SimbadResolver, TargetSource,
+};
 
-let resolver = FakeResolver::new().with_response("Vega", vega_identity());
-let facade = SimbadResolver::new(resolver, CacheBackend::InMemory, ResolverConfig::new("guide.example"))?;
+# async fn run() -> Result<(), simbad_resolver::Error> {
+let vega = ResolvedIdentity {
+    simbad_oid: Some(3_170_642),
+    primary_designation: "* alf Lyr".to_owned(),
+    common_name: Some("Vega".to_owned()),
+    object_type: ObjectType::Other, // SIMBAD otype "*" (a plain star) falls outside the closed set
+    otype_raw: "*".to_owned(),
+    ra_deg: 279.234_735,
+    dec_deg: 38.783_689,
+    v_mag: Some(0.03),
+    aliases: vec![ResolvedAlias::new("Vega", AliasKind::CommonName)],
+    source: TargetSource::Resolved,
+};
+let resolver = FakeResolver::new().with_response("Vega", vega);
+let facade =
+    SimbadResolver::new(resolver, CacheBackend::InMemory, ResolverConfig::new("guide.example"))?;
 match facade.resolve("Vega").await? {
-    Resolution::Resolved(target) => assert_eq!(target.primary_designation, "Vega"),
-    Resolution::Unresolved { .. } => panic!("FakeResolver has a canned Vega response"),
+    Resolution::Resolved(target) => assert_eq!(target.primary_designation, "* alf Lyr"),
+    Resolution::Unresolved { .. } => unreachable!("FakeResolver has a canned Vega response"),
 }
+# Ok(())
+# }
 ```
 
 ## Typeahead search

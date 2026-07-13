@@ -28,6 +28,14 @@ use unicode_normalization::UnicodeNormalization;
 /// The output is a lowercased, whitespace-collapsed, punctuation-stripped,
 /// prefix-expanded string suitable for exact-match hashing and token-set
 /// similarity scoring.
+///
+/// ```
+/// use simbad_resolver::normalize::normalize;
+///
+/// assert_eq!(normalize("M31"), "m 31"); // catalog-prefix expansion
+/// assert_eq!(normalize("NGC-5457"), "ngc 5457"); // punctuation stripped
+/// assert_eq!(normalize("  M  31  "), "m 31"); // whitespace collapsed + trimmed
+/// ```
 #[must_use]
 pub fn normalize(input: &str) -> String {
     // Stage 1a: NFKC normalization.
@@ -110,6 +118,13 @@ fn expand_prefixes(s: &str) -> String {
 }
 
 /// Tokenize a normalized string into a sorted, deduplicated set of tokens.
+///
+/// ```
+/// use simbad_resolver::normalize::{normalize, tokenize};
+///
+/// let normalized = normalize("NGC 5457");
+/// assert_eq!(tokenize(&normalized), vec!["5457", "ngc"]);
+/// ```
 #[must_use]
 pub fn tokenize(normalized: &str) -> Vec<&str> {
     let mut tokens: Vec<&str> = normalized.split_whitespace().collect();
@@ -126,6 +141,19 @@ pub fn tokenize(normalized: &str) -> Vec<&str> {
 /// scores `1.0`, `"Andromeda"` vs `"Andromeda Galaxy"` scores `0.5`. Being
 /// token-granular, it does **not** see intra-token typos: `"andromda"` scores
 /// `0.0` against `"andromeda"`. Two empty inputs score `0.0`.
+///
+/// This is what backs the fuzzy tier of [`crate::SimbadResolver::search`] via
+/// [`crate::ResolverConfig::with_fuzzy`].
+///
+/// ```
+/// use simbad_resolver::normalize::token_set_similarity;
+///
+/// let s = token_set_similarity("galaxy andromeda", "Andromeda Galaxy");
+/// assert!((s - 1.0).abs() < f32::EPSILON, "reordered tokens still match fully");
+///
+/// let partial = token_set_similarity("Andromeda", "Andromeda Galaxy");
+/// assert!((partial - 0.5).abs() < f32::EPSILON, "1 shared / 2 union tokens");
+/// ```
 #[must_use]
 pub fn token_set_similarity(a: &str, b: &str) -> f32 {
     jaccard_normalized(&normalize(a), &normalize(b))

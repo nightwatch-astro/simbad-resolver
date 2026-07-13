@@ -19,6 +19,19 @@ use uuid::Uuid;
 /// Callers should pick a fixed, application-specific seed (e.g.
 /// `"my-app.targets"`) and reuse it across runs; the namespace — and
 /// therefore every id derived from it — is stable for a given seed.
+///
+/// This is also what [`crate::ResolverConfig::new`] calls internally to
+/// derive [`crate::ResolverConfig::namespace`].
+///
+/// ```
+/// use simbad_resolver::identity::namespace;
+///
+/// let a = namespace("my-app.targets");
+/// let b = namespace("my-app.targets");
+/// let c = namespace("other-app.targets");
+/// assert_eq!(a, b, "same seed derives the same namespace");
+/// assert_ne!(a, c, "different seeds derive different namespaces");
+/// ```
 #[must_use]
 pub fn namespace(seed: &str) -> Uuid {
     Uuid::new_v5(&Uuid::NAMESPACE_DNS, seed.as_bytes())
@@ -30,6 +43,17 @@ pub fn namespace(seed: &str) -> Uuid {
 /// The `designation` should be the precedence-winning canonical designation
 /// for the resolved object (dedup by `simbad_oid` when available; this is the
 /// fallback key otherwise).
+///
+/// ```
+/// use simbad_resolver::identity::{namespace, target_id_from_designation};
+///
+/// let ns = namespace("my-app.targets");
+/// let id1 = target_id_from_designation(&ns, "M 31");
+/// let id2 = target_id_from_designation(&ns, "M 31");
+/// let id3 = target_id_from_designation(&ns, "M 101");
+/// assert_eq!(id1, id2, "same namespace + designation is deterministic");
+/// assert_ne!(id1, id3);
+/// ```
 #[must_use]
 pub fn target_id_from_designation(ns: &Uuid, designation: &str) -> Uuid {
     Uuid::new_v5(ns, designation.as_bytes())

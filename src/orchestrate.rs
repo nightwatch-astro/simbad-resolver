@@ -102,12 +102,29 @@ impl Default for CacheBackend {
 
 impl CacheBackend {
     /// A file-backed backend at `path` with default options.
+    ///
+    /// ```
+    /// use simbad_resolver::CacheBackend;
+    ///
+    /// let backend = CacheBackend::file("targets.redb"); // opened lazily by `SimbadResolver::new`
+    /// assert!(matches!(backend, CacheBackend::File(_)));
+    /// ```
     #[must_use]
     pub fn file(path: impl Into<PathBuf>) -> Self {
         Self::File(FileCache::new(path))
     }
 
     /// Wrap a caller-supplied cache backend.
+    ///
+    /// ```
+    /// use simbad_resolver::{CacheBackend, Store};
+    ///
+    /// # fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// // Any `Cache` impl works, e.g. a `Store`'s own `.cache()`.
+    /// let backend = CacheBackend::custom(Store::in_memory()?.cache());
+    /// assert!(matches!(backend, CacheBackend::Custom(_)));
+    /// # Ok(()) }
+    /// ```
     #[must_use]
     pub fn custom(cache: impl Cache + 'static) -> Self {
         Self::Custom(Arc::new(cache))
@@ -135,6 +152,13 @@ pub struct FileCache {
 
 impl FileCache {
     /// A file cache at `path` with default options.
+    ///
+    /// ```
+    /// use simbad_resolver::FileCache;
+    ///
+    /// let file_cache = FileCache::new("targets.redb");
+    /// assert_eq!(file_cache.path.to_str(), Some("targets.redb"));
+    /// ```
     #[must_use]
     pub fn new(path: impl Into<PathBuf>) -> Self {
         Self { path: path.into() }
@@ -196,16 +220,47 @@ impl<R: Resolver> SimbadResolver<R> {
     /// Returns [`Error`] if a built-in ([`CacheBackend::InMemory`] /
     /// [`CacheBackend::File`]) store cannot be opened or initialised.
     /// [`CacheBackend::Custom`] never fails here.
+    ///
+    /// ```
+    /// use simbad_resolver::{CacheBackend, OfflineResolver, ResolverConfig, SimbadResolver};
+    ///
+    /// let facade = SimbadResolver::new(
+    ///     OfflineResolver,
+    ///     CacheBackend::InMemory,
+    ///     ResolverConfig::new("my-app.targets"),
+    /// )?;
+    /// # let _ = facade;
+    /// # Ok::<(), simbad_resolver::Error>(())
+    /// ```
     pub fn new(resolver: R, cache: CacheBackend, config: ResolverConfig) -> Result<Self, Error> {
         Ok(Self { resolver, cache: cache.into_cache()?, config })
     }
 
     /// Borrow the underlying cache (e.g. for seeding or enumeration).
+    ///
+    /// ```
+    /// use simbad_resolver::{CacheBackend, OfflineResolver, ResolverConfig, SimbadResolver};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let facade =
+    ///     SimbadResolver::new(OfflineResolver, CacheBackend::InMemory, ResolverConfig::new("x"))?;
+    /// assert!(facade.cache().list().await?.is_empty(), "freshly constructed cache is empty");
+    /// # Ok(()) }
+    /// ```
     pub fn cache(&self) -> &dyn Cache {
         self.cache.as_ref()
     }
 
     /// Borrow the underlying resolver (e.g. to inspect a fake's call count in tests).
+    ///
+    /// ```
+    /// use simbad_resolver::{CacheBackend, OfflineResolver, ResolverConfig, SimbadResolver};
+    ///
+    /// let facade =
+    ///     SimbadResolver::new(OfflineResolver, CacheBackend::InMemory, ResolverConfig::new("x"))?;
+    /// let _resolver: &OfflineResolver = facade.resolver();
+    /// # Ok::<(), simbad_resolver::Error>(())
+    /// ```
     pub fn resolver(&self) -> &R {
         &self.resolver
     }
@@ -217,6 +272,38 @@ impl<R: Resolver> SimbadResolver<R> {
     /// `limit` of those are found, the remaining slots are filled with token-set
     /// similarity matches ([`crate::RANK_FUZZY`]), best score first. This fuzzy
     /// matching does not affect [`Self::resolve`], which stays exact-normalized.
+    ///
+    /// This example seeds the cache directly (no resolver call needed) then
+    /// searches it — see [the guide](crate::guide) for the full walkthrough.
+    ///
+    /// ```
+    /// use simbad_resolver::{
+    ///     AliasKind, CacheBackend, ObjectType, OfflineResolver, ResolvedAlias, ResolvedIdentity,
+    ///     ResolverConfig, SimbadResolver, TargetSource,
+    /// };
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let config = ResolverConfig::new("example");
+    /// let namespace = config.namespace;
+    /// let facade = SimbadResolver::new(OfflineResolver, CacheBackend::InMemory, config)?;
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544),
+    ///     primary_designation: "M 31".to_owned(),
+    ///     common_name: None,
+    ///     object_type: ObjectType::Galaxy,
+    ///     otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708,
+    ///     dec_deg: 41.268_75,
+    ///     v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// facade.cache().upsert(&m31, &namespace).await?;
+    ///
+    /// let hits = facade.search("M 3", 5).await?; // prefix match
+    /// assert_eq!(hits[0].target.primary_designation, "M 31");
+    /// # Ok(()) }
+    /// ```
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>, Error> {
         let mut hits = self.cache.search(query, limit).await?;
 
@@ -270,6 +357,23 @@ impl<R: Resolver> SimbadResolver<R> {
     /// [`Resolution::Unresolved`]. Caldwell designations (`C n`) are translated
     /// to their standard designation first and the original `C n` bound as an
     /// alias.
+    ///
+    /// See the [struct-level example](Self) for a seeded, network-free
+    /// walkthrough, or [`crate::guide`] for the full task-oriented guide.
+    ///
+    /// ```
+    /// use simbad_resolver::{CacheBackend, OfflineResolver, Resolution, ResolverConfig, SimbadResolver};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let facade =
+    ///     SimbadResolver::new(OfflineResolver, CacheBackend::InMemory, ResolverConfig::new("x"))?;
+    /// // Nothing cached and no network reachable (`OfflineResolver`): unresolved, not an error.
+    /// match facade.resolve("M31").await? {
+    ///     Resolution::Resolved(_) => unreachable!("cache is empty"),
+    ///     Resolution::Unresolved { query, .. } => assert_eq!(query, "M31"),
+    /// }
+    /// # Ok(()) }
+    /// ```
     pub async fn resolve(&self, query: &str) -> Result<Resolution, Error> {
         resolve_core(&self.resolver, self.cache.as_ref(), &self.config, query).await
     }
@@ -277,6 +381,38 @@ impl<R: Resolver> SimbadResolver<R> {
     /// Bind a chosen canonical target as an authoritative user override, adding
     /// `alias` and making the row sticky (`source = user-override`). Returns the
     /// updated target, or `None` if `target_id` is unknown.
+    ///
+    /// See [`crate::guide`] for a full "pin a target" walkthrough.
+    ///
+    /// ```
+    /// use simbad_resolver::{
+    ///     AliasKind, CacheBackend, ObjectType, OfflineResolver, ResolvedAlias, ResolvedIdentity,
+    ///     ResolverConfig, SimbadResolver, TargetSource,
+    /// };
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let config = ResolverConfig::new("example");
+    /// let namespace = config.namespace;
+    /// let facade = SimbadResolver::new(OfflineResolver, CacheBackend::InMemory, config)?;
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544),
+    ///     primary_designation: "M 31".to_owned(),
+    ///     common_name: None,
+    ///     object_type: ObjectType::Galaxy,
+    ///     otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708,
+    ///     dec_deg: 41.268_75,
+    ///     v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// let (id, _) = facade.cache().upsert(&m31, &namespace).await?;
+    ///
+    /// let pinned = facade.apply_override(id, "My Andromeda").await?.expect("id is known");
+    /// assert_eq!(pinned.source, TargetSource::UserOverride);
+    /// assert!(pinned.aliases.iter().any(|a| a.alias == "My Andromeda"));
+    /// # Ok(()) }
+    /// ```
     pub async fn apply_override(
         &self,
         target_id: Uuid,

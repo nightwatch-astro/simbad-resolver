@@ -49,6 +49,29 @@ pub struct CachedTarget {
 
 impl CachedTarget {
     /// Build a [`ResolvedIdentity`] view of this cached target.
+    ///
+    /// ```
+    /// use simbad_resolver::{AliasKind, CachedTarget, ObjectType, ResolvedAlias, TargetSource};
+    /// use uuid::Uuid;
+    ///
+    /// let target = CachedTarget {
+    ///     id: Uuid::nil(),
+    ///     simbad_oid: Some(1_575_544),
+    ///     primary_designation: "M 31".to_owned(),
+    ///     common_name: Some("Andromeda Galaxy".to_owned()),
+    ///     object_type: ObjectType::Galaxy,
+    ///     otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708,
+    ///     dec_deg: 41.268_75,
+    ///     v_mag: Some(3.44),
+    ///     source: TargetSource::Resolved,
+    ///     resolved_at: "2026-07-11T00:00:00Z".to_owned(),
+    ///     aliases: vec![ResolvedAlias::new("NGC 224", AliasKind::Designation)],
+    /// };
+    /// let identity = target.to_identity();
+    /// assert_eq!(identity.primary_designation, "M 31");
+    /// assert_eq!(identity.aliases, target.aliases);
+    /// ```
     #[must_use]
     pub fn to_identity(&self) -> ResolvedIdentity {
         ResolvedIdentity {
@@ -75,6 +98,23 @@ impl CachedTarget {
     ///
     /// `skymath::Error::OutOfRange` if the stored values are outside RA
     /// `[0, 360)` / Dec `[-90, +90]` (malformed cache content).
+    ///
+    /// ```
+    /// use simbad_resolver::{AliasKind, CachedTarget, ObjectType, ResolvedAlias, TargetSource};
+    /// use uuid::Uuid;
+    ///
+    /// # fn run() -> Result<(), skymath::Error> {
+    /// let target = CachedTarget {
+    ///     id: Uuid::nil(), simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     source: TargetSource::Resolved, resolved_at: "2026-07-11T00:00:00Z".to_owned(),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    /// };
+    /// let eq = target.position()?;
+    /// assert!((eq.ra().degrees() - 10.684_708).abs() < 1e-6);
+    /// # Ok(()) }
+    /// ```
     pub fn position(&self) -> skymath::Result<skymath::Equatorial> {
         skymath::Equatorial::j2000(
             skymath::Angle::from_degrees(self.ra_deg),
@@ -131,6 +171,12 @@ pub enum PendingState {
 
 impl PendingState {
     /// The wire/DB string.
+    ///
+    /// ```
+    /// use simbad_resolver::PendingState;
+    ///
+    /// assert_eq!(PendingState::Unresolved.as_wire(), "unresolved");
+    /// ```
     #[must_use]
     pub fn as_wire(self) -> &'static str {
         match self {
@@ -141,6 +187,13 @@ impl PendingState {
     }
 
     /// Parse a wire/DB string; unknown → `None`.
+    ///
+    /// ```
+    /// use simbad_resolver::PendingState;
+    ///
+    /// assert_eq!(PendingState::from_wire("resolved"), Some(PendingState::Resolved));
+    /// assert_eq!(PendingState::from_wire("bogus"), None);
+    /// ```
     #[must_use]
     pub fn from_wire(s: &str) -> Option<Self> {
         match s {
@@ -209,22 +262,123 @@ pub enum QueueError {
 #[async_trait::async_trait]
 pub trait Cache: Send + Sync {
     /// Read a cached target by its persisted id.
+    ///
+    /// These trait-method examples all use the built-in [`crate::Store`]'s
+    /// in-memory [`Cache`] (`RedbCache`) — local redb access, no network.
+    ///
+    /// ```
+    /// use simbad_resolver::{AliasKind, Cache, ObjectType, ResolvedAlias, ResolvedIdentity, Store, TargetSource};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// let (id, _) = store.cache().upsert(&m31, &uuid::Uuid::nil()).await?;
+    /// let target = store.cache().get_by_id(id).await?.expect("just inserted");
+    /// assert_eq!(target.primary_designation, "M 31");
+    /// # Ok(()) }
+    /// ```
     async fn get_by_id(&self, id: Uuid) -> Result<Option<CachedTarget>, CacheError>;
 
     /// Read a cached target by its SIMBAD physical-object id.
+    ///
+    /// ```
+    /// use simbad_resolver::{AliasKind, Cache, ObjectType, ResolvedAlias, ResolvedIdentity, Store, TargetSource};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// store.cache().upsert(&m31, &uuid::Uuid::nil()).await?;
+    /// let target = store.cache().get_by_simbad_oid(1_575_544).await?.expect("dedup key matches");
+    /// assert_eq!(target.primary_designation, "M 31");
+    /// # Ok(()) }
+    /// ```
     async fn get_by_simbad_oid(&self, oid: i64) -> Result<Option<CachedTarget>, CacheError>;
 
     /// Read a cached target by an exact normalized alias (normalize the query first).
+    ///
+    /// ```
+    /// use simbad_resolver::{
+    ///     normalize::normalize, AliasKind, Cache, ObjectType, ResolvedAlias, ResolvedIdentity,
+    ///     Store, TargetSource,
+    /// };
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// store.cache().upsert(&m31, &uuid::Uuid::nil()).await?;
+    /// let target = store.cache().get_by_normalized(&normalize("M31")).await?.expect("normalized match");
+    /// assert_eq!(target.primary_designation, "M 31");
+    /// # Ok(()) }
+    /// ```
     async fn get_by_normalized(&self, normalized: &str)
         -> Result<Option<CachedTarget>, CacheError>;
 
     /// Ranked typeahead search over aliases: exact > prefix > substring, deduped
     /// to one hit per target (best rank wins, ties → shortest alias), capped to
     /// `limit`. Local-only, no network. A blank query or `limit == 0` → empty.
+    ///
+    /// See [`crate::SimbadResolver::search`] for the facade wrapper that also
+    /// adds a fuzzy tier on top of this.
+    ///
+    /// ```
+    /// use simbad_resolver::{AliasKind, Cache, ObjectType, ResolvedAlias, ResolvedIdentity, Store, TargetSource};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// store.cache().upsert(&m31, &uuid::Uuid::nil()).await?;
+    /// let hits = store.cache().search("M 3", 5).await?; // prefix match
+    /// assert_eq!(hits[0].target.primary_designation, "M 31");
+    /// # Ok(()) }
+    /// ```
     async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>, CacheError>;
 
     /// Upsert an identity (and its aliases) with dedup + precedence. `namespace`
     /// is the caller's id namespace for the designation-derived fallback id.
+    ///
+    /// ```
+    /// use simbad_resolver::{
+    ///     AliasKind, Cache, ObjectType, ResolvedAlias, ResolvedIdentity, Store, TargetSource,
+    ///     UpsertOutcome,
+    /// };
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// let (_id, outcome) = store.cache().upsert(&m31, &uuid::Uuid::nil()).await?;
+    /// assert_eq!(outcome, UpsertOutcome::Inserted);
+    /// # Ok(()) }
+    /// ```
     async fn upsert(
         &self,
         identity: &ResolvedIdentity,
@@ -233,13 +387,63 @@ pub trait Cache: Send + Sync {
 
     /// Add a user alias (`kind = 'user'`). Returns `true` if newly inserted,
     /// `false` if it already existed (idempotent).
+    ///
+    /// ```
+    /// use simbad_resolver::{AliasKind, Cache, ObjectType, ResolvedAlias, ResolvedIdentity, Store, TargetSource};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// let (id, _) = store.cache().upsert(&m31, &uuid::Uuid::nil()).await?;
+    /// assert!(store.cache().add_user_alias(id, "My Andromeda").await?);
+    /// assert!(!store.cache().add_user_alias(id, "My Andromeda").await?, "idempotent");
+    /// # Ok(()) }
+    /// ```
     async fn add_user_alias(&self, target_id: Uuid, alias: &str) -> Result<bool, CacheError>;
 
     /// Remove a user alias by id, only if its `kind = 'user'`. Returns whether a
     /// row was removed.
+    ///
+    /// The alias id is opaque and backend-assigned (not exposed by
+    /// [`CachedTarget`]/[`ResolvedAlias`] directly), so this trait-level example
+    /// only demonstrates the no-op case on an unknown id — see
+    /// `crate::cache::redb` tests for a full add/remove round trip.
+    ///
+    /// ```
+    /// use simbad_resolver::{Cache, Store};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// assert!(!store.cache().remove_user_alias("does-not-exist").await?);
+    /// # Ok(()) }
+    /// ```
     async fn remove_user_alias(&self, alias_id: &str) -> Result<bool, CacheError>;
 
     /// List all cached targets (ordered by `primary_designation`).
+    ///
+    /// ```
+    /// use simbad_resolver::{AliasKind, Cache, ObjectType, ResolvedAlias, ResolvedIdentity, Store, TargetSource};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// assert!(store.cache().list().await?.is_empty());
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// store.cache().upsert(&m31, &uuid::Uuid::nil()).await?;
+    /// assert_eq!(store.cache().list().await?.len(), 1);
+    /// # Ok(()) }
+    /// ```
     async fn list(&self) -> Result<Vec<CachedTarget>, CacheError>;
 }
 
@@ -253,25 +457,116 @@ pub trait Cache: Send + Sync {
 #[async_trait::async_trait]
 pub trait Queue: Send + Sync {
     /// Enqueue an item (idempotent by `id`); a no-op if `id` already present.
+    ///
+    /// These trait-method examples all use the built-in [`crate::Store`]'s
+    /// in-memory [`Queue`] (`RedbQueue`) — local redb access, no network.
+    ///
+    /// ```
+    /// use simbad_resolver::{Queue, Store};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// store.queue().enqueue("job-1", "M31").await?;
+    /// store.queue().enqueue("job-1", "M31").await?; // idempotent
+    /// assert_eq!(store.queue().pending_count().await?, 1);
+    /// # Ok(()) }
+    /// ```
     async fn enqueue(&self, id: &str, query: &str) -> Result<(), QueueError>;
 
     /// Claim up to `n` pending items for processing (approximately FIFO).
+    ///
+    /// ```
+    /// use simbad_resolver::{PendingState, Queue, Store};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// store.queue().enqueue("job-1", "M31").await?;
+    /// let claimed = store.queue().claim_pending(8).await?;
+    /// assert_eq!(claimed.len(), 1);
+    /// assert_eq!(claimed[0].state, PendingState::Pending);
+    /// # Ok(()) }
+    /// ```
     async fn claim_pending(&self, n: usize) -> Result<Vec<PendingItem>, QueueError>;
 
     /// Mark an item resolved and bind its target (attempts unchanged).
+    ///
+    /// ```
+    /// use simbad_resolver::{PendingState, Queue, Store};
+    /// use uuid::Uuid;
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// store.queue().enqueue("job-1", "M31").await?;
+    /// store.queue().mark_resolved("job-1", Uuid::nil()).await?;
+    /// let item = store.queue().get("job-1").await?.expect("still present");
+    /// assert_eq!(item.state, PendingState::Resolved);
+    /// assert_eq!(item.target_id, Some(Uuid::nil()));
+    /// # Ok(()) }
+    /// ```
     async fn mark_resolved(&self, id: &str, target_id: Uuid) -> Result<(), QueueError>;
 
     /// Mark an item unresolved (content miss); attempts += 1.
+    ///
+    /// ```
+    /// use simbad_resolver::{PendingState, Queue, Store};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// store.queue().enqueue("job-1", "does-not-exist").await?;
+    /// store.queue().mark_unresolved("job-1").await?;
+    /// let item = store.queue().get("job-1").await?.expect("still present");
+    /// assert_eq!(item.state, PendingState::Unresolved);
+    /// assert_eq!(item.attempts, 1);
+    /// # Ok(()) }
+    /// ```
     async fn mark_unresolved(&self, id: &str) -> Result<(), QueueError>;
 
     /// Release a claimed item back to pending after a transient failure
     /// (attempts unchanged).
+    ///
+    /// ```
+    /// use simbad_resolver::{PendingState, Queue, Store};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// store.queue().enqueue("job-1", "M31").await?;
+    /// store.queue().claim_pending(8).await?; // simulate a claim
+    /// store.queue().release("job-1").await?; // ... then a transient failure
+    /// let item = store.queue().get("job-1").await?.expect("still present");
+    /// assert_eq!(item.state, PendingState::Pending);
+    /// assert_eq!(item.attempts, 0, "transient failures don't spend the attempt budget");
+    /// # Ok(()) }
+    /// ```
     async fn release(&self, id: &str) -> Result<(), QueueError>;
 
     /// Read a single item by id.
+    ///
+    /// ```
+    /// use simbad_resolver::{Queue, Store};
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// assert!(store.queue().get("job-1").await?.is_none());
+    /// store.queue().enqueue("job-1", "M31").await?;
+    /// assert_eq!(store.queue().get("job-1").await?.unwrap().query, "M31");
+    /// # Ok(()) }
+    /// ```
     async fn get(&self, id: &str) -> Result<Option<PendingItem>, QueueError>;
 
     /// Count items still `pending`.
+    ///
+    /// ```
+    /// use simbad_resolver::{Queue, Store};
+    /// use uuid::Uuid;
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::Error> {
+    /// let store = Store::in_memory()?;
+    /// store.queue().enqueue("job-1", "M31").await?;
+    /// store.queue().enqueue("job-2", "M101").await?;
+    /// store.queue().mark_resolved("job-1", Uuid::nil()).await?;
+    /// assert_eq!(store.queue().pending_count().await?, 1);
+    /// # Ok(()) }
+    /// ```
     async fn pending_count(&self) -> Result<usize, QueueError>;
 }
 

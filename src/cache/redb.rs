@@ -180,6 +180,18 @@ impl Store {
     ///
     /// Returns [`CacheError::Backend`] if the database cannot be opened or its
     /// tables cannot be initialised.
+    ///
+    /// ```
+    /// use simbad_resolver::Store;
+    ///
+    /// # fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let path = std::env::temp_dir().join("simbad-resolver-doctest-store-open.redb");
+    /// let store = Store::open(&path)?; // creates the file if missing
+    /// assert!(path.exists());
+    /// # let _ = store;
+    /// # let _ = std::fs::remove_file(&path);
+    /// # Ok(()) }
+    /// ```
     pub fn open(path: impl AsRef<Path>) -> Result<Self, CacheError> {
         let db = Database::create(path).map_err(cache_err)?;
         init_tables(&db)?;

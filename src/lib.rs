@@ -1,33 +1,13 @@
-//! # simbad-resolver
-//!
-//! A **SIMBAD astronomical target resolver** for Rust.
-//!
-//! Resolves astronomical names, designations, and positions to canonical
-//! identities via SIMBAD, and provides the higher-level orchestration:
-//! cache-first [`SimbadResolver::resolve`], sticky
-//! [`SimbadResolver::apply_override`], local [`SimbadResolver::search`], and the
-//! async [`BatchResolver`]. Persistence is a single redb-backed [`Store`] that
-//! serves both durable (file) and ephemeral (in-memory) modes.
-//!
-//! Resolved-object types ([`ResolvedIdentity`], [`CachedTarget`], and cone-search
-//! [`PositionMatch`]) also expose a typed `skymath::Equatorial` position via
-//! `position()` alongside their raw `ra_deg`/`dec_deg` — SIMBAD's ICRS output is
-//! treated as J2000 at planning grade (≤ ~1 arcminute).
-//!
-//! ```no_run
-//! use simbad_resolver::{CacheBackend, Resolution, ResolverConfig, SimbadResolver, TapResolver};
-//! # async fn demo() -> Result<(), simbad_resolver::Error> {
-//! let resolver = TapResolver::with_defaults().expect("client");
-//! // Zero-config ephemeral cache; use `CacheBackend::file("targets.redb")` to persist,
-//! // or `CacheBackend::custom(my_cache)` to bring your own backend.
-//! let facade =
-//!     SimbadResolver::new(resolver, CacheBackend::InMemory, ResolverConfig::new("my-app.targets"))?;
-//! if let Resolution::Resolved(t) = facade.resolve("M 31").await? {
-//!     println!("{} @ ({}, {})", t.primary_designation, t.ra_deg, t.dec_deg);
-//! }
-//! # Ok(()) }
-//! ```
+// The README is the docs.rs crate-root landing page; its own `rust` fences are
+// this crate's doctests (network ones `no_run`, offline ones runnable — see
+// README.md's per-section notes). Keep prose in the README, not duplicated here.
+#![doc = include_str!("../README.md")]
 #![forbid(unsafe_code)]
+
+// `docs/guide.md`, rendered as its own docs.rs page (this module is otherwise
+// empty — it exists only to give the included guide somewhere to render).
+#[doc = include_str!("../docs/guide.md")]
+pub mod guide {}
 
 pub mod caldwell;
 pub mod identity;

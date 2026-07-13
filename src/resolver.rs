@@ -21,6 +21,20 @@ use crate::types::{PositionMatch, ResolvedIdentity};
 #[async_trait::async_trait]
 pub trait Resolver: Send + Sync {
     /// Resolve a complete designation or common name to a canonical identity.
+    ///
+    /// Any [`crate::TapResolver`]/[`crate::SesameResolver`] call needs network
+    /// access (see their own docs for `no_run` examples); this one uses the
+    /// offline [`crate::FakeResolver`] test double instead:
+    ///
+    /// ```
+    /// use simbad_resolver::{FakeResolver, ResolveError, Resolver};
+    ///
+    /// # async fn run() {
+    /// let resolver = FakeResolver::new(); // no canned responses registered
+    /// let err = resolver.resolve("does-not-exist").await.unwrap_err();
+    /// assert!(matches!(err, ResolveError::NotFound(_)));
+    /// # }
+    /// ```
     async fn resolve(&self, query: &str) -> Result<ResolvedIdentity, ResolveError>;
 
     /// Resolve a verbatim FITS `OBJECT` header value to a canonical identity.
@@ -30,6 +44,32 @@ pub trait Resolver: Send + Sync {
     /// guessed. The default delegates to [`Resolver::resolve`];
     /// implementations only override this when they need FITS-specific
     /// pre-normalization.
+    ///
+    /// ```
+    /// use simbad_resolver::{
+    ///     AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, Resolver,
+    ///     TargetSource,
+    /// };
+    ///
+    /// # async fn run() {
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544),
+    ///     primary_designation: "M 31".to_owned(),
+    ///     common_name: None,
+    ///     object_type: ObjectType::Galaxy,
+    ///     otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708,
+    ///     dec_deg: 41.268_75,
+    ///     v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// let resolver = FakeResolver::new().with_response("M31", m31);
+    /// // The default impl just forwards to `resolve`.
+    /// let got = resolver.resolve_object("M 31").await.unwrap();
+    /// assert_eq!(got.primary_designation, "M 31");
+    /// # }
+    /// ```
     async fn resolve_object(&self, object_raw: &str) -> Result<ResolvedIdentity, ResolveError> {
         self.resolve(object_raw).await
     }
@@ -37,6 +77,23 @@ pub trait Resolver: Send + Sync {
 
 /// Position resolution (cone search) is a separate capability some resolver
 /// backends provide; not every [`Resolver`] supports it.
+///
+/// [`crate::TapResolver`] is the built-in implementation; it queries the real
+/// SIMBAD TAP endpoint, so this example is `no_run`:
+///
+/// ```no_run
+/// use simbad_resolver::{PositionResolver, TapResolver};
+///
+/// # async fn run() -> Result<(), simbad_resolver::ResolveError> {
+/// let resolver = TapResolver::with_defaults()?;
+/// // Objects within 0.05° of M 31's ICRS position, nearest first (max 5).
+/// let matches = resolver.resolve_position(10.684_708, 41.268_75, 0.05, 5).await?;
+/// for m in &matches {
+///     println!("{} at {:.4}°", m.identity.primary_designation, m.separation_deg);
+/// }
+/// # Ok(())
+/// # }
+/// ```
 #[async_trait::async_trait]
 pub trait PositionResolver: Send + Sync {
     /// Nearest object(s) within `radius_deg` of `(ra_deg, dec_deg)`, nearest first.
@@ -54,6 +111,15 @@ pub trait PositionResolver: Send + Sync {
 /// Used when online resolution is disabled by configuration, so callers can
 /// run a cache-first use case without constructing a network client. Every
 /// call reports [`ResolveError::Disabled`].
+///
+/// ```
+/// use simbad_resolver::{OfflineResolver, ResolveError, Resolver};
+///
+/// # async fn run() {
+/// let err = OfflineResolver.resolve("M 31").await.unwrap_err();
+/// assert_eq!(err, ResolveError::Disabled);
+/// # }
+/// ```
 #[derive(Clone, Copy, Debug, Default)]
 pub struct OfflineResolver;
 
@@ -95,12 +161,47 @@ pub struct FakeResolver {
 #[cfg(any(test, feature = "test-util"))]
 impl FakeResolver {
     /// Construct an empty fake; unknown queries return [`ResolveError::NotFound`].
+    ///
+    /// ```
+    /// use simbad_resolver::{FakeResolver, ResolveError, Resolver};
+    ///
+    /// # async fn run() {
+    /// let err = FakeResolver::new().resolve("anything").await.unwrap_err();
+    /// assert!(matches!(err, ResolveError::NotFound(_)));
+    /// # }
+    /// ```
     #[must_use]
     pub fn new() -> Self {
         Self::default()
     }
 
     /// Register a canned successful identity, keyed by the normalized `query`.
+    ///
+    /// ```
+    /// use simbad_resolver::{
+    ///     AliasKind, FakeResolver, ObjectType, ResolvedAlias, ResolvedIdentity, Resolver,
+    ///     TargetSource,
+    /// };
+    ///
+    /// # async fn run() {
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544),
+    ///     primary_designation: "M 31".to_owned(),
+    ///     common_name: None,
+    ///     object_type: ObjectType::Galaxy,
+    ///     otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708,
+    ///     dec_deg: 41.268_75,
+    ///     v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// let resolver = FakeResolver::new().with_response("M31", m31);
+    /// // Registered under normalized "M31"; any equivalent form matches.
+    /// let got = resolver.resolve("M 31").await.unwrap();
+    /// assert_eq!(got.primary_designation, "M 31");
+    /// # }
+    /// ```
     #[must_use]
     pub fn with_response(mut self, query: &str, identity: ResolvedIdentity) -> Self {
         self.responses.insert(crate::normalize::normalize(query), identity);
@@ -108,6 +209,17 @@ impl FakeResolver {
     }
 
     /// Register a canned error for `query`, keyed by its normalized form.
+    ///
+    /// ```
+    /// use simbad_resolver::{FakeResolver, ResolveError, Resolver};
+    ///
+    /// # async fn run() {
+    /// let resolver = FakeResolver::new()
+    ///     .with_error("M31", ResolveError::Ambiguous { query: "M31".to_owned(), count: 2 });
+    /// let err = resolver.resolve("M 31").await.unwrap_err();
+    /// assert!(matches!(err, ResolveError::Ambiguous { count: 2, .. }));
+    /// # }
+    /// ```
     #[must_use]
     pub fn with_error(mut self, query: &str, error: ResolveError) -> Self {
         self.errors.insert(crate::normalize::normalize(query), error);
@@ -117,6 +229,17 @@ impl FakeResolver {
     /// Set the error returned for any unregistered query (default:
     /// [`ResolveError::NotFound`]). Use [`ResolveError::Network`] to simulate
     /// an offline resolver for degrade-to-cache tests.
+    ///
+    /// ```
+    /// use simbad_resolver::{FakeResolver, ResolveError, Resolver};
+    ///
+    /// # async fn run() {
+    /// let resolver =
+    ///     FakeResolver::new().with_default_error(ResolveError::Network("down".to_owned()));
+    /// let err = resolver.resolve("anything").await.unwrap_err();
+    /// assert!(matches!(err, ResolveError::Network(_)));
+    /// # }
+    /// ```
     #[must_use]
     pub fn with_default_error(mut self, error: ResolveError) -> Self {
         self.default_error = Some(error);
@@ -127,6 +250,17 @@ impl FakeResolver {
     ///
     /// Uses `Relaxed` ordering; suitable for single-threaded test assertions
     /// after all async work has completed.
+    ///
+    /// ```
+    /// use simbad_resolver::{FakeResolver, Resolver};
+    ///
+    /// # async fn run() {
+    /// let resolver = FakeResolver::new();
+    /// assert_eq!(resolver.call_count(), 0);
+    /// let _ = resolver.resolve("M 31").await;
+    /// assert_eq!(resolver.call_count(), 1);
+    /// # }
+    /// ```
     #[must_use]
     pub fn call_count(&self) -> usize {
         self.call_count.load(std::sync::atomic::Ordering::Relaxed)

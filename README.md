@@ -25,7 +25,9 @@ redb-backed store (durable or in-memory) ship in the default build.
 Full API documentation is generated from the source and published on docs.rs:
 **[docs.rs/simbad-resolver](https://docs.rs/simbad-resolver)**. For a
 task-oriented walkthrough (resolving a name, testing offline, batching,
-storage), see **[docs/guide.md](docs/guide.md)**.
+storage), see the
+**[guide](https://docs.rs/simbad-resolver/latest/simbad_resolver/guide/index.html)**
+(also in this repo at `docs/guide.md`).
 
 ```bash
 cargo doc --open
@@ -98,7 +100,9 @@ tier. This does not change `resolve`, which stays exact-normalized.
 [`SimbadResolver::apply_override`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SimbadResolver.html#method.apply_override)
 binds a chosen canonical target as authoritative: it adds the supplied alias
 and marks the row sticky (`source = user-override`), so a later re-resolve does
-not overwrite it. See [docs/guide.md](docs/guide.md) for an example.
+not overwrite it. See the
+[guide](https://docs.rs/simbad-resolver/latest/simbad_resolver/guide/index.html)
+for an example.
 
 ## Storage
 
@@ -203,8 +207,9 @@ When a query does not resolve, the
 still resolve), `Unknown` (no such object — give up), or `Ambiguous` (several
 distinct objects — disambiguate the query).
 
-See [docs/guide.md](docs/guide.md) for a walkthrough that also covers testing
-without the network (`OfflineResolver`/`FakeResolver`) and batch resolution.
+See the [guide](https://docs.rs/simbad-resolver/latest/simbad_resolver/guide/index.html)
+for a walkthrough that also covers testing without the network
+(`OfflineResolver`/`FakeResolver`) and batch resolution.
 
 ```toml
 [dependencies]
@@ -219,4 +224,5 @@ that display resolved data should credit CDS and send an identifying
 
 ## License
 
-Licensed under the Apache License, Version 2.0. See [LICENSE](LICENSE).
+Licensed under the Apache License, Version 2.0. See
+[LICENSE](https://github.com/nightwatch-astro/simbad-resolver/blob/main/LICENSE).

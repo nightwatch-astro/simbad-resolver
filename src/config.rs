@@ -43,6 +43,15 @@ impl Default for SimbadConfig {
 impl SimbadConfig {
     /// Build a config from caller-persisted settings, clamping `timeout_secs`
     /// to a minimum of 1 second (a 0s timeout would fail every request).
+    ///
+    /// ```
+    /// use std::time::Duration;
+    ///
+    /// use simbad_resolver::SimbadConfig;
+    ///
+    /// let config = SimbadConfig::from_settings("https://example.test/tap", 0);
+    /// assert_eq!(config.timeout, Duration::from_secs(1), "0s is clamped to 1s");
+    /// ```
     #[must_use]
     pub fn from_settings(endpoint: impl Into<String>, timeout_secs: u64) -> Self {
         Self {
@@ -86,6 +95,15 @@ pub struct ResolverConfig {
 impl ResolverConfig {
     /// Build a config from an id-namespace seed (e.g. your app's reverse-DNS
     /// name). Online resolution defaults to enabled.
+    ///
+    /// ```
+    /// use simbad_resolver::ResolverConfig;
+    ///
+    /// let a = ResolverConfig::new("my-app.targets");
+    /// let b = ResolverConfig::new("my-app.targets");
+    /// assert!(a.online_enabled);
+    /// assert_eq!(a.namespace, b.namespace, "same seed derives the same namespace");
+    /// ```
     #[must_use]
     pub fn new(namespace_seed: &str) -> Self {
         Self {
@@ -96,6 +114,13 @@ impl ResolverConfig {
     }
 
     /// Set whether online resolution is enabled.
+    ///
+    /// ```
+    /// use simbad_resolver::ResolverConfig;
+    ///
+    /// let offline = ResolverConfig::new("x").with_online(false);
+    /// assert!(!offline.online_enabled);
+    /// ```
     #[must_use]
     pub fn with_online(mut self, online_enabled: bool) -> Self {
         self.online_enabled = online_enabled;
@@ -103,6 +128,15 @@ impl ResolverConfig {
     }
 
     /// Use an explicit namespace UUID (rather than deriving it from a seed).
+    ///
+    /// ```
+    /// use simbad_resolver::ResolverConfig;
+    /// use uuid::Uuid;
+    ///
+    /// let explicit = Uuid::from_u128(0x1234_5678_90ab_cdef_1234_5678_90ab_cdef);
+    /// let config = ResolverConfig::new("x").with_namespace(explicit);
+    /// assert_eq!(config.namespace, explicit);
+    /// ```
     #[must_use]
     pub fn with_namespace(mut self, namespace: Uuid) -> Self {
         self.namespace = namespace;
@@ -114,6 +148,13 @@ impl ResolverConfig {
     /// hits whose token-set similarity to the query is at least `min_score`
     /// (clamped to `0.0..=1.0`), in a [`crate::RANK_FUZZY`] tier. Off by default.
     /// Does not affect [`crate::SimbadResolver::resolve`], which stays exact.
+    ///
+    /// ```
+    /// use simbad_resolver::ResolverConfig;
+    ///
+    /// let config = ResolverConfig::new("x").with_fuzzy(2.0); // clamped to 1.0
+    /// assert_eq!(config.fuzzy_min_score, Some(1.0));
+    /// ```
     #[must_use]
     pub fn with_fuzzy(mut self, min_score: f32) -> Self {
         self.fuzzy_min_score = Some(min_score.clamp(0.0, 1.0));
