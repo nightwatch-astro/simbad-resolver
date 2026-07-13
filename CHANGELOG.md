@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.2.1...simbad-resolver-v0.2.2) (2026-07-13)
+
+
+### Documentation
+
+* render README + guide on docs.rs, add per-method examples ([#17](https://github.com/nightwatch-astro/simbad-resolver/issues/17)) ([302f9cc](https://github.com/nightwatch-astro/simbad-resolver/commit/302f9ccd58d5eebcc56d82aedae4dd4cf203db7f))
+
 ## [0.2.1](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.2.0...simbad-resolver-v0.2.1) (2026-07-13)
 
 
