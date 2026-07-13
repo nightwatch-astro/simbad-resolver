@@ -57,6 +57,18 @@ impl SimbadConfig {
 ///
 /// Settings are supplied by the caller at construction; the library persists
 /// none of them.
+///
+/// ```
+/// use simbad_resolver::ResolverConfig;
+///
+/// // Namespaced by a fixed, application-specific seed so derived target ids
+/// // stay stable across runs. See `SimbadResolver::new` for its full role.
+/// let config = ResolverConfig::new("my-app.targets").with_fuzzy(0.6);
+/// assert!(config.online_enabled);
+/// assert_eq!(config.fuzzy_min_score, Some(0.6));
+/// ```
+///
+/// [`SimbadResolver::new`]: crate::SimbadResolver::new
 #[derive(Clone, Debug)]
 pub struct ResolverConfig {
     /// Whether online resolution is attempted on a cache miss. When `false`,

@@ -48,6 +48,24 @@ const MAX_BODY_BYTES: usize = 8 * 1024 * 1024;
 /// Optionally enriches a coarse Sesame hit through a caller-supplied
 /// [`Resolver`] trait object ([`Self::with_enricher`]) — typically
 /// [`crate::TapResolver`].
+///
+/// Queries the real CDS Sesame endpoint, so this example is `no_run` — it
+/// needs network access to complete. `Vega` is resolvable by Sesame even
+/// though it is not a SIMBAD `NAME …` alias, which is the broader-coverage
+/// tradeoff over [`crate::TapResolver`].
+///
+/// ```no_run
+/// use std::sync::Arc;
+///
+/// use simbad_resolver::{Resolver, SesameResolver, TapResolver};
+///
+/// # async fn demo() -> Result<(), simbad_resolver::ResolveError> {
+/// let enricher: Arc<dyn Resolver> = Arc::new(TapResolver::with_defaults()?);
+/// let resolver = SesameResolver::new().with_enricher(enricher);
+/// let identity = resolver.resolve("Vega").await?;
+/// println!("{} @ ({}, {})", identity.primary_designation, identity.ra_deg, identity.dec_deg);
+/// # Ok(()) }
+/// ```
 pub struct SesameResolver {
     config: SimbadConfig,
     client: reqwest::Client,

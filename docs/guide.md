@@ -1,0 +1,221 @@
+# Guide
+
+A task-oriented walkthrough of `simbad-resolver`. For the full API reference,
+see [docs.rs/simbad-resolver](https://docs.rs/simbad-resolver). The examples
+below use `M 31` (the Andromeda Galaxy) and `Vega` as the canonical fixtures —
+the same two objects the crate's own doctests and `examples/` use.
+
+## Install
+
+```toml
+[dependencies]
+simbad-resolver = "0.2"
+```
+
+## Resolve a name from SIMBAD
+
+[`TapResolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.TapResolver.html)
+queries the live SIMBAD TAP endpoint, so this snippet needs network access and
+is `no_run`:
+
+```rust,no_run
+use simbad_resolver::{CacheBackend, Resolution, ResolverConfig, SimbadResolver, TapResolver};
+
+# async fn run() -> Result<(), Box<dyn std::error::Error>> {
+let resolver = TapResolver::with_defaults()?;
+let facade =
+    SimbadResolver::new(resolver, CacheBackend::InMemory, ResolverConfig::new("your.namespace"))?;
+
+match facade.resolve("M31").await? {
+    Resolution::Resolved(target) => {
+        println!("{} at ({}, {})", target.primary_designation, target.ra_deg, target.dec_deg);
+    }
+    Resolution::Unresolved { reason, .. } => println!("unresolved: {reason:?}"),
+}
+# Ok(())
+# }
+```
+
+[`SimbadResolver::resolve`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SimbadResolver.html#method.resolve)
+is cache-first: a query already in the cache never reaches the resolver. That
+makes it possible to exercise the whole facade without the network, which is
+what the rest of this guide (and the crate's test suite) does.
+
+## Test without the network
+
+Two options avoid live SIMBAD calls:
+
+- [`OfflineResolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.OfflineResolver.html)
+  — a zero-cost [`Resolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/trait.Resolver.html)
+  that always returns
+  [`ResolveError::Disabled`](https://docs.rs/simbad-resolver/latest/simbad_resolver/enum.ResolveError.html).
+  Combine it with a pre-seeded cache to exercise cache-first resolution with no
+  feature flag required (used below).
+- [`FakeResolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.FakeResolver.html)
+  — an in-memory test double with canned responses/errors, gated behind the
+  `test-util` feature (add `simbad-resolver = { version = "0.2", features = ["test-util"] }`
+  to `[dev-dependencies]`).
+
+This example is fully runnable — it seeds the cache directly with the `M 31`
+fixture, then resolves it through `OfflineResolver` without any network call:
+
+```rust
+use simbad_resolver::{
+    AliasKind, CacheBackend, ObjectType, OfflineResolver, Resolution, ResolvedAlias,
+    ResolvedIdentity, ResolverConfig, SimbadResolver, TargetSource,
+};
+
+# async fn run() -> Result<(), simbad_resolver::Error> {
+let config = ResolverConfig::new("guide.example");
+let namespace = config.namespace;
+let facade = SimbadResolver::new(OfflineResolver, CacheBackend::InMemory, config)?;
+
+let m31 = ResolvedIdentity {
+    simbad_oid: Some(1_575_544),
+    primary_designation: "M 31".to_owned(),
+    common_name: Some("Andromeda Galaxy".to_owned()),
+    object_type: ObjectType::Galaxy,
+    otype_raw: "G".to_owned(),
+    ra_deg: 10.684_708,
+    dec_deg: 41.268_75,
+    v_mag: Some(3.44),
+    aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    source: TargetSource::Seed,
+};
+facade.cache().upsert(&m31, &namespace).await?;
+
+match facade.resolve("M31").await? {
+    Resolution::Resolved(target) => assert_eq!(target.primary_designation, "M 31"),
+    Resolution::Unresolved { .. } => unreachable!("seeded above"),
+}
+# Ok(())
+# }
+```
+
+`examples/resolve_offline.rs` runs the same pattern as a standalone binary:
+`cargo run --example resolve_offline`.
+
+With the `test-util` feature enabled, `FakeResolver` gives the same result
+without touching the cache directly:
+
+```rust,ignore
+use simbad_resolver::{CacheBackend, FakeResolver, Resolution, ResolverConfig, SimbadResolver};
+
+let resolver = FakeResolver::new().with_response("Vega", vega_identity());
+let facade = SimbadResolver::new(resolver, CacheBackend::InMemory, ResolverConfig::new("guide.example"))?;
+match facade.resolve("Vega").await? {
+    Resolution::Resolved(target) => assert_eq!(target.primary_designation, "Vega"),
+    Resolution::Unresolved { .. } => panic!("FakeResolver has a canned Vega response"),
+}
+```
+
+## Broader name coverage with Sesame
+
+[`SesameResolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SesameResolver.html)
+resolves a wider range of names than TAP (it aggregates SIMBAD, NED, and
+VizieR), at the cost of coarser output — no `simbad_oid`, and no alias set
+unless you attach a `TapResolver` as an
+[enricher](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SesameResolver.html#method.with_enricher).
+This also needs network access:
+
+```rust,no_run
+use std::sync::Arc;
+
+use simbad_resolver::{Resolver, SesameResolver, TapResolver};
+
+# async fn run() -> Result<(), simbad_resolver::ResolveError> {
+let enricher: Arc<dyn Resolver> = Arc::new(TapResolver::with_defaults()?);
+let resolver = SesameResolver::new().with_enricher(enricher);
+let identity = resolver.resolve("Vega").await?;
+println!("{} @ ({}, {})", identity.primary_designation, identity.ra_deg, identity.dec_deg);
+# Ok(())
+# }
+```
+
+## Batch-resolve many names
+
+[`BatchResolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.BatchResolver.html)
+drains a durable queue cache-first then online, distinguishing transient
+failures (retried later) from content misses (marked unresolved). This example
+seeds the cache first, so `drain()` resolves `M 31` without a resolver call:
+
+```rust
+use simbad_resolver::{
+    AliasKind, BatchResolver, Cache, ObjectType, OfflineResolver, ResolvedAlias, ResolvedIdentity,
+    ResolverConfig, Store, TargetSource,
+};
+
+# async fn run() -> Result<(), simbad_resolver::Error> {
+let store = Store::in_memory()?;
+let config = ResolverConfig::new("guide.example");
+let namespace = config.namespace;
+
+let m31 = ResolvedIdentity {
+    simbad_oid: Some(1_575_544),
+    primary_designation: "M 31".to_owned(),
+    common_name: None,
+    object_type: ObjectType::Galaxy,
+    otype_raw: "G".to_owned(),
+    ra_deg: 10.684_708,
+    dec_deg: 41.268_75,
+    v_mag: Some(3.44),
+    aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    source: TargetSource::Seed,
+};
+store.cache().upsert(&m31, &namespace).await?;
+
+let batch = BatchResolver::new(OfflineResolver, store.cache(), store.queue(), config)
+    .with_batch_size(8);
+batch.enqueue("job-1", "M31").await?;
+
+let summary = batch.drain().await?;
+assert_eq!(summary.resolved, 1);
+# Ok(())
+# }
+```
+
+## Typed coordinates
+
+[`ResolvedIdentity`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.ResolvedIdentity.html)
+and
+[`CachedTarget`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.CachedTarget.html)
+keep `ra_deg`/`dec_deg` as the canonical `f64` storage and also expose a typed
+[`skymath::Equatorial`](https://docs.rs/skymath/latest/skymath/struct.Equatorial.html)
+accessor:
+
+```rust
+use simbad_resolver::{AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource};
+
+let m31 = ResolvedIdentity {
+    simbad_oid: Some(1_575_544),
+    primary_designation: "M 31".to_owned(),
+    common_name: Some("Andromeda Galaxy".to_owned()),
+    object_type: ObjectType::Galaxy,
+    otype_raw: "G".to_owned(),
+    ra_deg: 10.684_708,
+    dec_deg: 41.268_75,
+    v_mag: Some(3.44),
+    aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    source: TargetSource::Resolved,
+};
+
+let eq = m31.position().expect("valid ICRS coordinates");
+assert!((eq.ra().degrees() - 10.684_708).abs() < 1e-6);
+```
+
+## Configuration
+
+| Type | Field | Default | Effect |
+| --- | --- | --- | --- |
+| [`ResolverConfig`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.ResolverConfig.html) | `online_enabled` | `true` | When `false`, `resolve` only consults the cache. |
+| `ResolverConfig` | `namespace` | derived from the seed passed to [`ResolverConfig::new`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.ResolverConfig.html#method.new) | UUIDv5 namespace for stable target ids; reuse the same seed across runs. |
+| `ResolverConfig` | `fuzzy_min_score` | `None` (disabled) | Minimum token-set similarity for a fuzzy [`SimbadResolver::search`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SimbadResolver.html#method.search) hit; set via [`with_fuzzy`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.ResolverConfig.html#method.with_fuzzy). |
+| [`SimbadConfig`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SimbadConfig.html) | `endpoint` | SIMBAD TAP sync endpoint | Backend URL for `TapResolver`/`SesameResolver`. |
+| `SimbadConfig` | `timeout` | 10s | Per-request timeout; on expiry the resolver returns [`ResolveError::Timeout`](https://docs.rs/simbad-resolver/latest/simbad_resolver/enum.ResolveError.html). |
+| `SimbadConfig` | `user_agent` | `simbad-resolver/<version> (+https://github.com/nightwatch-astro/simbad-resolver)` | Identifying header sent with every request (CDS norm). |
+
+## Attribution
+
+This library queries SIMBAD, operated at CDS, Strasbourg, France. Applications
+that display resolved data should credit CDS and send an identifying
+`User-Agent` header (configurable via `SimbadConfig`).

@@ -30,6 +30,44 @@ pub struct DrainSummary {
 
 /// The async batch resolver. Generic over any [`Resolver`]; the cache and queue
 /// backends are type-erased so the type does not carry them.
+///
+/// This example seeds the cache before draining, so [`Self::drain`] resolves
+/// `"M31"` from the cache alone — no network call, so it runs without
+/// [`crate::OfflineResolver`] ever reaching a resolver backend.
+///
+/// ```
+/// use simbad_resolver::{
+///     AliasKind, BatchResolver, Cache, ObjectType, OfflineResolver, ResolvedAlias,
+///     ResolvedIdentity, ResolverConfig, Store, TargetSource,
+/// };
+///
+/// # async fn demo() -> Result<(), simbad_resolver::Error> {
+/// let store = Store::in_memory()?;
+/// let config = ResolverConfig::new("guide.example");
+/// let namespace = config.namespace;
+///
+/// let m31 = ResolvedIdentity {
+///     simbad_oid: Some(1_575_544),
+///     primary_designation: "M 31".to_owned(),
+///     common_name: None,
+///     object_type: ObjectType::Galaxy,
+///     otype_raw: "G".to_owned(),
+///     ra_deg: 10.684_708,
+///     dec_deg: 41.268_75,
+///     v_mag: Some(3.44),
+///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+///     source: TargetSource::Seed,
+/// };
+/// store.cache().upsert(&m31, &namespace).await?;
+///
+/// let batch = BatchResolver::new(OfflineResolver, store.cache(), store.queue(), config)
+///     .with_batch_size(8);
+/// batch.enqueue("job-1", "M31").await?;
+///
+/// let summary = batch.drain().await?;
+/// assert_eq!(summary.resolved, 1, "cache hit, no resolver call needed");
+/// # Ok(()) }
+/// ```
 pub struct BatchResolver<R: Resolver> {
     resolver: R,
     cache: Arc<dyn Cache>,

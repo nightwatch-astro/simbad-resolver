@@ -13,6 +13,16 @@ use crate::types::{AliasKind, ResolvedAlias, TargetSource};
 use crate::{caldwell, config::ResolverConfig, normalize, Resolver};
 
 /// Why a query could not be resolved to a canonical target.
+///
+/// ```
+/// use simbad_resolver::UnresolvedReason;
+///
+/// // A transient failure and a genuine content miss both leave a query
+/// // `Unresolved`, but a caller acts on them differently.
+/// assert!(matches!(UnresolvedReason::Offline, UnresolvedReason::Offline));
+/// let content_miss = UnresolvedReason::Unknown;
+/// assert_ne!(content_miss, UnresolvedReason::Offline);
+/// ```
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum UnresolvedReason {
     /// The online resolver was unreachable/timed out/disabled; the caller may
@@ -25,11 +35,26 @@ pub enum UnresolvedReason {
 }
 
 /// The outcome of a [`SimbadResolver::resolve`] call.
+///
+/// ```
+/// use simbad_resolver::{Resolution, UnresolvedReason};
+///
+/// let outcome = Resolution::Unresolved {
+///     query: "not-a-real-object".to_owned(),
+///     reason: UnresolvedReason::Unknown,
+/// };
+/// match outcome {
+///     Resolution::Resolved(target) => println!("{}", target.primary_designation),
+///     Resolution::Unresolved { query, reason } => {
+///         println!("{query} did not resolve: {reason:?}");
+///     }
+/// }
+/// ```
 #[derive(Clone, Debug, PartialEq)]
 pub enum Resolution {
     /// A canonical target (from cache or freshly resolved + cached).
     Resolved(CachedTarget),
-    /// No canonical target; never a fabricated one.
+    /// No canonical target was found; see [`UnresolvedReason`] for why.
     Unresolved {
         /// The verbatim query.
         query: String,
@@ -50,6 +75,15 @@ pub enum Resolution {
 /// ephemeral, nothing-persisted choice and is what [`Default`] selects. For a
 /// truly uncached one-shot lookup, call a bare [`Resolver`] directly instead of
 /// the facade.
+///
+/// ```
+/// use simbad_resolver::CacheBackend;
+///
+/// let ephemeral = CacheBackend::InMemory;
+/// let durable = CacheBackend::file("targets.redb"); // opened lazily by `SimbadResolver::new`
+/// assert!(matches!(ephemeral, CacheBackend::InMemory));
+/// assert!(matches!(durable, CacheBackend::File(_)));
+/// ```
 pub enum CacheBackend {
     /// Ephemeral in-memory redb store (nothing persisted to disk).
     InMemory,
@@ -112,6 +146,42 @@ impl FileCache {
 /// Generic over any [`Resolver`] backend (TAP, Sesame, offline, fake); the cache
 /// backend is chosen at construction via [`CacheBackend`] and type-erased, so
 /// the facade type does not carry it.
+///
+/// This example uses [`crate::OfflineResolver`] and seeds the cache directly, so
+/// it runs without a network call — the cache-first lookup below never reaches
+/// the resolver.
+///
+/// ```
+/// use simbad_resolver::{
+///     AliasKind, CacheBackend, OfflineResolver, ObjectType, Resolution, ResolvedAlias,
+///     ResolvedIdentity, ResolverConfig, SimbadResolver, TargetSource,
+/// };
+///
+/// # async fn demo() -> Result<(), simbad_resolver::Error> {
+/// let config = ResolverConfig::new("guide.example");
+/// let namespace = config.namespace;
+/// let facade = SimbadResolver::new(OfflineResolver, CacheBackend::InMemory, config)?;
+///
+/// let m31 = ResolvedIdentity {
+///     simbad_oid: Some(1_575_544),
+///     primary_designation: "M 31".to_owned(),
+///     common_name: Some("Andromeda Galaxy".to_owned()),
+///     object_type: ObjectType::Galaxy,
+///     otype_raw: "G".to_owned(),
+///     ra_deg: 10.684_708,
+///     dec_deg: 41.268_75,
+///     v_mag: Some(3.44),
+///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+///     source: TargetSource::Seed,
+/// };
+/// facade.cache().upsert(&m31, &namespace).await?;
+///
+/// match facade.resolve("M31").await? {
+///     Resolution::Resolved(target) => assert_eq!(target.primary_designation, "M 31"),
+///     Resolution::Unresolved { .. } => unreachable!("seeded above"),
+/// }
+/// # Ok(()) }
+/// ```
 pub struct SimbadResolver<R: Resolver> {
     resolver: R,
     cache: Arc<dyn Cache>,
@@ -145,8 +215,8 @@ impl<R: Resolver> SimbadResolver<R> {
     /// Returns exact/prefix/substring matches (see [`Cache::search`]). When fuzzy
     /// matching is enabled via [`ResolverConfig::with_fuzzy`] and fewer than
     /// `limit` of those are found, the remaining slots are filled with token-set
-    /// similarity matches ([`crate::RANK_FUZZY`]), best score first. [`Self::resolve`]
-    /// is never affected — it stays exact-normalized and never fabricates.
+    /// similarity matches ([`crate::RANK_FUZZY`]), best score first. This fuzzy
+    /// matching does not affect [`Self::resolve`], which stays exact-normalized.
     pub async fn search(&self, query: &str, limit: usize) -> Result<Vec<SearchHit>, Error> {
         let mut hits = self.cache.search(query, limit).await?;
 
@@ -199,7 +269,7 @@ impl<R: Resolver> SimbadResolver<R> {
     /// the resolver, persist the result, and return it; otherwise return a typed
     /// [`Resolution::Unresolved`]. Caldwell designations (`C n`) are translated
     /// to their standard designation first and the original `C n` bound as an
-    /// alias. Never fabricates.
+    /// alias.
     pub async fn resolve(&self, query: &str) -> Result<Resolution, Error> {
         resolve_core(&self.resolver, self.cache.as_ref(), &self.config, query).await
     }
@@ -227,7 +297,7 @@ impl<R: Resolver> SimbadResolver<R> {
 
 /// The shared cache-first resolve routine used by both the facade and the batch
 /// resolver. Caldwell-translates, checks the cache, then (if online) resolves,
-/// persists, and re-reads. Never fabricates.
+/// persists, and re-reads.
 pub(crate) async fn resolve_core<R: Resolver, C: Cache + ?Sized>(
     resolver: &R,
     cache: &C,

@@ -152,6 +152,22 @@ impl StoredPending {
 /// Cloning is cheap (an `Arc` handle over one `redb::Database`), so
 /// [`Self::cache`] / [`Self::queue`] hand out independent wrappers sharing the
 /// same underlying database.
+///
+/// [`Store::in_memory`] opens an ephemeral database, so this example is fully
+/// runnable with no filesystem access. Share one [`Store`] between a
+/// [`crate::SimbadResolver`] (via [`crate::CacheBackend::custom`]) and a
+/// [`crate::BatchResolver`] to have both operate over the same rows.
+///
+/// ```
+/// use simbad_resolver::Store;
+///
+/// # fn demo() -> Result<(), simbad_resolver::CacheError> {
+/// let store = Store::in_memory()?;
+/// let cache = store.cache(); // implements `Cache`
+/// let queue = store.queue(); // implements `Queue`
+/// # let _ = (cache, queue);
+/// # Ok(()) }
+/// ```
 #[derive(Clone)]
 pub struct Store {
     db: Arc<Database>,
