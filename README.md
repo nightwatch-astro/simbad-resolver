@@ -165,8 +165,13 @@ and the cone-search
 keep their canonical `ra_deg`/`dec_deg` (`f64`, ICRS J2000 degrees) and also
 expose a typed accessor:
 
-```rust,ignore
+```rust
+# use simbad_resolver::ResolvedIdentity;
+# fn coordinates(target: &ResolvedIdentity) -> Result<(), Box<dyn std::error::Error>> {
 let eq = target.position()?; // skymath::Equatorial: validated RA/Dec carrying its epoch
+# let _ = eq;
+# Ok(())
+# }
 ```
 
 `position()` returns a [`skymath::Equatorial`](https://docs.rs/skymath/latest/skymath/struct.Equatorial.html)
