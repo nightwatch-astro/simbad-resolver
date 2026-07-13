@@ -23,6 +23,7 @@ use simbad_resolver::{CacheBackend, Resolution, ResolverConfig, SimbadResolver, 
 
 # async fn run() -> Result<(), Box<dyn std::error::Error>> {
 let resolver = TapResolver::with_defaults()?;
+// Ephemeral cache; `CacheBackend::file("targets.redb")` persists across restarts.
 let facade =
     SimbadResolver::new(resolver, CacheBackend::InMemory, ResolverConfig::new("your.namespace"))?;
 
@@ -40,6 +41,15 @@ match facade.resolve("M31").await? {
 is cache-first: a query already in the cache never reaches the resolver. That
 makes it possible to exercise the whole facade without the network, which is
 what the rest of this guide (and the crate's test suite) does.
+
+The `reason` on
+[`Resolution::Unresolved`](https://docs.rs/simbad-resolver/latest/simbad_resolver/enum.Resolution.html)
+is an
+[`UnresolvedReason`](https://docs.rs/simbad-resolver/latest/simbad_resolver/enum.UnresolvedReason.html)
+that tells the caller what to do next: `Offline` (backend unreachable, timed
+out, or disabled — retry later; cached objects still resolve), `Unknown` (no
+such object — give up), or `Ambiguous` (the query maps to several distinct
+objects — disambiguate it).
 
 ## Test without the network
 
@@ -109,6 +119,54 @@ match facade.resolve("Vega").await? {
 }
 ```
 
+## Typeahead search
+
+[`SimbadResolver::search`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SimbadResolver.html#method.search)
+is a local, network-free lookup over cached aliases, ranked exact > prefix >
+substring. It never calls the resolver, so — like `resolve` on a cache hit — it
+runs offline once the cache is seeded:
+
+```rust
+use simbad_resolver::{
+    AliasKind, CacheBackend, ObjectType, OfflineResolver, ResolvedAlias, ResolvedIdentity,
+    ResolverConfig, SimbadResolver, TargetSource,
+};
+
+# async fn run() -> Result<(), simbad_resolver::Error> {
+let config = ResolverConfig::new("guide.example");
+let namespace = config.namespace;
+let facade = SimbadResolver::new(OfflineResolver, CacheBackend::InMemory, config)?;
+
+let m31 = ResolvedIdentity {
+    simbad_oid: Some(1_575_544),
+    primary_designation: "M 31".to_owned(),
+    common_name: Some("Andromeda Galaxy".to_owned()),
+    object_type: ObjectType::Galaxy,
+    otype_raw: "G".to_owned(),
+    ra_deg: 10.684_708,
+    dec_deg: 41.268_75,
+    v_mag: Some(3.44),
+    aliases: vec![
+        ResolvedAlias::new("M 31", AliasKind::Designation),
+        ResolvedAlias::new("Andromeda Galaxy", AliasKind::CommonName),
+    ],
+    source: TargetSource::Seed,
+};
+facade.cache().upsert(&m31, &namespace).await?;
+
+// Prefix match on the "M 31" alias.
+let hits = facade.search("M 3", 5).await?;
+assert_eq!(hits[0].target.primary_designation, "M 31");
+# Ok(())
+# }
+```
+
+To also match near-misses (typos, reordered tokens), enable fuzzy matching with
+[`ResolverConfig::with_fuzzy`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.ResolverConfig.html#method.with_fuzzy);
+those hits land in the
+[`RANK_FUZZY`](https://docs.rs/simbad-resolver/latest/simbad_resolver/constant.RANK_FUZZY.html)
+tier, after the exact/prefix/substring ranks.
+
 ## Broader name coverage with Sesame
 
 [`SesameResolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SesameResolver.html)
@@ -136,8 +194,25 @@ println!("{} @ ({}, {})", identity.primary_designation, identity.ra_deg, identit
 
 [`BatchResolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.BatchResolver.html)
 drains a durable queue cache-first then online, distinguishing transient
-failures (retried later) from content misses (marked unresolved). This example
-seeds the cache first, so `drain()` resolves `M 31` without a resolver call:
+failures (retried later) from content misses (marked unresolved).
+
+It takes a cache and a queue as separate arguments. Both come from one
+[`Store`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.Store.html)
+— an open redb database.
+[`Store::in_memory`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.Store.html#method.in_memory)
+(ephemeral) and
+[`Store::open`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.Store.html#method.open)
+(file-backed) each hand out a
+[`.cache()`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.Store.html#method.cache)
+and a
+[`.queue()`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.Store.html#method.queue)
+view over that same database. Passing one `Store`'s `.cache()` to both a
+`BatchResolver` and a `SimbadResolver` (via
+[`CacheBackend::custom`](https://docs.rs/simbad-resolver/latest/simbad_resolver/enum.CacheBackend.html#method.custom))
+makes the facade and the batch resolver operate over the same rows.
+
+This example seeds the cache first, so `drain()` resolves `M 31` without a
+resolver call:
 
 ```rust
 use simbad_resolver::{

@@ -59,6 +59,30 @@ translates them to the underlying catalog designation via
 [`caldwell::caldwell_to_designation`](https://docs.rs/simbad-resolver/latest/simbad_resolver/caldwell/fn.caldwell_to_designation.html)
 before resolving, then binds the original `C n` as an alias.
 
+## Positions
+
+Resolving by sky position (cone search) is the
+[`PositionResolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/trait.PositionResolver.html)
+capability, implemented by `TapResolver`. Its
+[`resolve_position`](https://docs.rs/simbad-resolver/latest/simbad_resolver/trait.PositionResolver.html#tymethod.resolve_position)
+returns the objects within `radius_deg` of an ICRS position, nearest first, as
+[`PositionMatch`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.PositionMatch.html)
+values. This hits the live endpoint, so it needs network access:
+
+```rust,no_run
+use simbad_resolver::{PositionResolver, TapResolver};
+
+# async fn run() -> Result<(), simbad_resolver::ResolveError> {
+let resolver = TapResolver::with_defaults()?;
+// Objects within 0.05° of M 31's ICRS position, nearest first (max 5).
+let matches = resolver.resolve_position(10.684_708, 41.268_75, 0.05, 5).await?;
+for m in &matches {
+    println!("{} at {:.4}°", m.identity.primary_designation, m.separation_deg);
+}
+# Ok(())
+# }
+```
+
 ## Search
 
 [`SimbadResolver::search`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SimbadResolver.html#method.search)
@@ -101,9 +125,31 @@ Under the hood the built-in variants open a
 [`Store::open`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.Store.html#method.open)
 /
 [`Store::in_memory`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.Store.html#method.in_memory),
-each exposing `.cache()` and `.queue()` over one database) — use it directly to
-share a single database between a `SimbadResolver` and a `BatchResolver`, or to
-tune the backend.
+each exposing `.cache()` and `.queue()` over one database). Open the `Store`
+yourself to share one database between a `SimbadResolver` and a `BatchResolver`:
+
+```rust,no_run
+use simbad_resolver::{
+    BatchResolver, CacheBackend, ResolverConfig, SimbadResolver, Store, TapResolver,
+};
+
+# fn run() -> Result<(), Box<dyn std::error::Error>> {
+let store = Store::open("targets.redb")?;
+let config = ResolverConfig::new("your.namespace");
+
+// Both operate over the same rows: the facade caches resolved targets, the
+// batch resolver drains its queue into that same cache.
+let facade = SimbadResolver::new(
+    TapResolver::with_defaults()?,
+    CacheBackend::custom(store.cache()),
+    config.clone(),
+)?;
+let batch =
+    BatchResolver::new(TapResolver::with_defaults()?, store.cache(), store.queue(), config);
+# let _ = (facade, batch);
+# Ok(())
+# }
+```
 
 ## Coordinates
 
@@ -148,6 +194,14 @@ match facade.resolve("M31").await? {
 # Ok(())
 # }
 ```
+
+When a query does not resolve, the
+[`Resolution::Unresolved`](https://docs.rs/simbad-resolver/latest/simbad_resolver/enum.Resolution.html)
+`reason` is a
+[`UnresolvedReason`](https://docs.rs/simbad-resolver/latest/simbad_resolver/enum.UnresolvedReason.html):
+`Offline` (backend unreachable/timed out/disabled — retry later; cached objects
+still resolve), `Unknown` (no such object — give up), or `Ambiguous` (several
+distinct objects — disambiguate the query).
 
 See [docs/guide.md](docs/guide.md) for a walkthrough that also covers testing
 without the network (`OfflineResolver`/`FakeResolver`) and batch resolution.
