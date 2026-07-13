@@ -54,6 +54,28 @@ trait, so either can back a
 facade or a
 [`BatchResolver`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.BatchResolver.html).
 
+Caldwell designations (`C 14`) are not SIMBAD identifiers; the facade
+translates them to the underlying catalog designation via
+[`caldwell::caldwell_to_designation`](https://docs.rs/simbad-resolver/latest/simbad_resolver/caldwell/fn.caldwell_to_designation.html)
+before resolving, then binds the original `C n` as an alias.
+
+## Search
+
+[`SimbadResolver::search`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SimbadResolver.html#method.search)
+is a local, network-free typeahead over cached aliases, ranked exact > prefix >
+substring. Enabling fuzzy matching with
+[`ResolverConfig::with_fuzzy`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.ResolverConfig.html#method.with_fuzzy)
+fills remaining result slots with token-set similarity hits in the
+[`RANK_FUZZY`](https://docs.rs/simbad-resolver/latest/simbad_resolver/constant.RANK_FUZZY.html)
+tier. This does not change `resolve`, which stays exact-normalized.
+
+## Overrides
+
+[`SimbadResolver::apply_override`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SimbadResolver.html#method.apply_override)
+binds a chosen canonical target as authoritative: it adds the supplied alias
+and marks the row sticky (`source = user-override`), so a later re-resolve does
+not overwrite it. See [docs/guide.md](docs/guide.md) for an example.
+
 ## Storage
 
 The facade selects its cache with a

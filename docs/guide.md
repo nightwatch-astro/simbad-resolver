@@ -174,6 +174,46 @@ assert_eq!(summary.resolved, 1);
 # }
 ```
 
+## Pin a target with a user override
+
+[`SimbadResolver::apply_override`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.SimbadResolver.html#method.apply_override)
+binds a chosen canonical target as authoritative — it adds an alias and marks
+the row sticky (`source = user-override`), so a later re-resolve does not
+overwrite it. It returns the updated target, or `None` if the id is unknown.
+This example seeds `M 31`, then pins it under a custom alias, all offline:
+
+```rust
+use simbad_resolver::{
+    AliasKind, CacheBackend, ObjectType, OfflineResolver, ResolvedAlias, ResolvedIdentity,
+    ResolverConfig, SimbadResolver, TargetSource,
+};
+
+# async fn run() -> Result<(), simbad_resolver::Error> {
+let config = ResolverConfig::new("guide.example");
+let namespace = config.namespace;
+let facade = SimbadResolver::new(OfflineResolver, CacheBackend::InMemory, config)?;
+
+let m31 = ResolvedIdentity {
+    simbad_oid: Some(1_575_544),
+    primary_designation: "M 31".to_owned(),
+    common_name: None,
+    object_type: ObjectType::Galaxy,
+    otype_raw: "G".to_owned(),
+    ra_deg: 10.684_708,
+    dec_deg: 41.268_75,
+    v_mag: Some(3.44),
+    aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    source: TargetSource::Seed,
+};
+let (id, _) = facade.cache().upsert(&m31, &namespace).await?;
+
+let pinned = facade.apply_override(id, "My Andromeda").await?.expect("id is known");
+assert_eq!(pinned.source, TargetSource::UserOverride);
+assert!(pinned.aliases.iter().any(|a| a.alias == "My Andromeda"));
+# Ok(())
+# }
+```
+
 ## Typed coordinates
 
 [`ResolvedIdentity`](https://docs.rs/simbad-resolver/latest/simbad_resolver/struct.ResolvedIdentity.html)

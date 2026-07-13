@@ -12,6 +12,16 @@ use crate::cache::{CacheError, QueueError};
 ///
 /// `Clone`/`Eq` let callers (e.g. a durable retry queue) retain the error
 /// across attempts without re-running the request.
+///
+/// ```
+/// use simbad_resolver::ResolveError;
+///
+/// // Transport failures are worth retrying; content misses are not.
+/// assert!(ResolveError::Network("connection reset".to_owned()).is_transient());
+/// assert!(ResolveError::Timeout(10).is_transient());
+/// assert!(!ResolveError::NotFound("not-an-object".to_owned()).is_transient());
+/// assert!(!ResolveError::Ambiguous { query: "M".to_owned(), count: 3 }.is_transient());
+/// ```
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ResolveError {
     /// Network/transport failure reaching the resolver backend; degrade to
