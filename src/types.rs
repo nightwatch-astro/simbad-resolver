@@ -250,9 +250,31 @@ impl ResolvedAlias {
 
 /// A fully resolved canonical target identity returned by a [`crate::Resolver`].
 ///
-/// Coordinates are ICRS J2000 decimal degrees and are never fabricated: a
-/// resolver that cannot determine a real position returns
-/// [`crate::ResolveError::NotFound`] instead of inventing one.
+/// Coordinates are ICRS J2000 decimal degrees, sourced from the resolver
+/// backend: a resolver that cannot determine a position returns
+/// [`crate::ResolveError::NotFound`] rather than a placeholder value.
+///
+/// ```
+/// use simbad_resolver::{AliasKind, ObjectType, ResolvedAlias, ResolvedIdentity, TargetSource};
+///
+/// let m31 = ResolvedIdentity {
+///     simbad_oid: Some(1_575_544),
+///     primary_designation: "M 31".to_owned(),
+///     common_name: Some("Andromeda Galaxy".to_owned()),
+///     object_type: ObjectType::Galaxy,
+///     otype_raw: "G".to_owned(),
+///     ra_deg: 10.684_708,
+///     dec_deg: 41.268_75,
+///     v_mag: Some(3.44),
+///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+///     source: TargetSource::Resolved,
+/// };
+///
+/// // The typed accessor shares one coordinate representation with `skymath`
+/// // consumers; `ra_deg`/`dec_deg` remain the source of truth.
+/// let eq = m31.position().expect("valid ICRS coordinates");
+/// assert!((eq.ra().degrees() - 10.684_708).abs() < 1e-6);
+/// ```
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ResolvedIdentity {
     /// SIMBAD physical-object id (the dedup key) when resolved online; `None`

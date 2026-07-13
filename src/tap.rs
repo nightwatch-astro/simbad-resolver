@@ -2,9 +2,9 @@
 //!
 //! Talks to the SIMBAD TAP `sim-tap/sync` endpoint (ADQL, TSV) over HTTPS via
 //! an async `reqwest` client, with polite usage (configurable timeout + an
-//! identifying `User-Agent`). Never fabricates coordinates: a query with no
-//! `basic` row returns [`ResolveError::NotFound`]; a query that maps to
-//! several distinct physical objects returns [`ResolveError::Ambiguous`].
+//! identifying `User-Agent`). A query with no `basic` row returns
+//! [`ResolveError::NotFound`]; a query that maps to several distinct physical
+//! objects returns [`ResolveError::Ambiguous`].
 //!
 //! # Query shape
 //!
@@ -49,6 +49,19 @@ use crate::{
 const MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
 
 /// Live SIMBAD TAP resolver: implements [`Resolver`] and [`PositionResolver`].
+///
+/// Queries the real SIMBAD TAP endpoint, so this example is `no_run` — it
+/// needs network access to complete.
+///
+/// ```no_run
+/// use simbad_resolver::{Resolver, TapResolver};
+///
+/// # async fn demo() -> Result<(), simbad_resolver::ResolveError> {
+/// let resolver = TapResolver::with_defaults()?;
+/// let identity = resolver.resolve("M 31").await?;
+/// println!("{} @ ({}, {})", identity.primary_designation, identity.ra_deg, identity.dec_deg);
+/// # Ok(()) }
+/// ```
 #[derive(Debug)]
 pub struct TapResolver {
     client: reqwest::Client,
@@ -227,7 +240,7 @@ impl PositionResolver for TapResolver {
             .into_iter()
             .map(|(oid, main_id, ra, dec, otype_raw, v_mag, dist)| PositionMatch {
                 // No second alias round-trip for a cone hit: `assemble_identity`
-                // still guarantees the primary designation is present.
+                // still includes the primary designation in the alias set.
                 identity: assemble_identity(
                     oid,
                     &main_id,
@@ -329,9 +342,9 @@ fn assemble_aliases(body: &str) -> (Vec<ResolvedAlias>, Option<String>) {
 }
 
 /// Build the canonical [`ResolvedIdentity`] from a parsed `basic` row plus its
-/// alias set, guaranteeing the primary designation is present as a
-/// designation alias even when the alias round-trip didn't return it (or, for
-/// a cone-search hit, wasn't run at all).
+/// alias set. The returned alias set always includes the primary designation
+/// as an [`AliasKind::Designation`] entry, even when the alias round-trip
+/// didn't return it, or, for a cone-search hit, wasn't run at all.
 #[allow(clippy::too_many_arguments)]
 fn assemble_identity(
     oid: i64,

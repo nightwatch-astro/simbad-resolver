@@ -6,13 +6,22 @@ use crate::cache::{CacheError, QueueError};
 ///
 /// `Network`/`Timeout`/`Disabled` are transient — degrade to seed+cache and
 /// retry later ([`ResolveError::is_transient`]). `NotFound`/`Ambiguous`/`Parse`
-/// are content misses: the query itself did not resolve, so retrying it
-/// unchanged will not help. A resolver MUST NOT fabricate an identity: a
-/// content miss is always reported as one of these variants rather than a
-/// best-guess result.
+/// are content misses: the query itself did not resolve, so an identical retry
+/// produces the same result. A resolver reports a content miss as one of these
+/// variants rather than returning a best-guess result in their place.
 ///
 /// `Clone`/`Eq` let callers (e.g. a durable retry queue) retain the error
 /// across attempts without re-running the request.
+///
+/// ```
+/// use simbad_resolver::ResolveError;
+///
+/// // Transport failures are worth retrying; content misses are not.
+/// assert!(ResolveError::Network("connection reset".to_owned()).is_transient());
+/// assert!(ResolveError::Timeout(10).is_transient());
+/// assert!(!ResolveError::NotFound("not-an-object".to_owned()).is_transient());
+/// assert!(!ResolveError::Ambiguous { query: "M".to_owned(), count: 3 }.is_transient());
+/// ```
 #[derive(Clone, Debug, Eq, PartialEq, thiserror::Error)]
 pub enum ResolveError {
     /// Network/transport failure reaching the resolver backend; degrade to

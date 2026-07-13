@@ -26,15 +26,16 @@ the maintainer's input. Newest at the top of each section.
 
 - **MSRV** assumed `1.82`. Adjust if you target older.
 - **Cone-search radius units**: degrees (matches ICRS decimal-degree convention).
-- **Sesame XML format (NEEDS LIVE VERIFICATION)**: the Sesame resolver (`src/sesame/`)
-  parses a **hand-built** `-oxp` (`SNV`) fixture based on the documented schema,
-  NOT a byte-for-byte live capture. Endpoint
-  `https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?<name>`. The parser is
-  tolerant (falls back to scanning the whole doc), but if live Sesame differs
-  (tag casing, attribute-based fields, nesting) the fixture + parser in
-  `src/sesame/parse.rs` need a refresh. **Action**: run the ignored live tests
-  (`just test-live`, or `cargo test --test live -- --ignored`) on a networked
-  machine to confirm/refresh (covers both Sesame and TAP).
+- **Sesame XML format — live-verified 2026-07-13**: the Sesame resolver
+  (`src/sesame/`) parses a **hand-built** `-oxp` (`SNV`) fixture based on the
+  documented schema, NOT a byte-for-byte live capture. Endpoint
+  `https://cds.unistra.fr/cgi-bin/nph-sesame/-oxp/SNV?<name>`. `just test-live`
+  (`cargo test --test live -- --ignored`, covering both Sesame and TAP) passed
+  against the live endpoints on 2026-07-13, including `sesame_resolves_m31`.
+  The parser is tolerant (falls back to scanning the whole doc), but CDS can
+  change the response shape without notice; re-run the ignored live tests
+  periodically (the scheduled `live-simbad` CI workflow does this for TAP) to
+  catch drift.
 - **Sesame `common_name`** is always `None` (Sesame has no SIMBAD-`NAME` curated
   analog); enrichment via a supplied TAP resolver fills type/aliases when wanted.
 

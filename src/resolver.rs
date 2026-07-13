@@ -9,10 +9,12 @@ use crate::types::{PositionMatch, ResolvedIdentity};
 
 /// Resolve a designation or common name to one canonical identity.
 ///
-/// Implementations MUST NOT fabricate: 0 rows → [`ResolveError::NotFound`],
-/// more than one distinct physical object → [`ResolveError::Ambiguous`],
-/// transport/timeout → [`ResolveError::Network`]/[`ResolveError::Timeout`],
-/// disabled → [`ResolveError::Disabled`], malformed → [`ResolveError::Parse`].
+/// Zero rows resolve to [`ResolveError::NotFound`], more than one distinct
+/// physical object to [`ResolveError::Ambiguous`], a transport/timeout failure
+/// to [`ResolveError::Network`]/[`ResolveError::Timeout`], a disabled backend
+/// to [`ResolveError::Disabled`], and a malformed response to
+/// [`ResolveError::Parse`] — implementations MUST return one of these variants
+/// rather than a synthesized identity.
 ///
 /// Implementations MUST be `Send + Sync` so a resolver can be shared across a
 /// background queue.
