@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.2.2...simbad-resolver-v0.2.3) (2026-07-13)
+
+
+### Documentation
+
+* compile the coordinates example so docs.rs no longer marks it untested ([#19](https://github.com/nightwatch-astro/simbad-resolver/issues/19)) ([dbd64b6](https://github.com/nightwatch-astro/simbad-resolver/commit/dbd64b6d9e01b1543905b2b333979f82cb303039))
+
 ## [0.2.2](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.2.1...simbad-resolver-v0.2.2) (2026-07-13)
 
 
