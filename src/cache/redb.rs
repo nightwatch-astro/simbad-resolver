@@ -406,6 +406,19 @@ fn search(db: &Database, query: &str, limit: usize) -> Result<Vec<SearchHit>, Ca
     Ok(hits)
 }
 
+/// How [`rewrite_aliases`] finds a target's current alias row ids to retire.
+///
+/// Mirrors [`OidLookup`]: `Scan` (single-item `upsert`, one call so an O(n)
+/// walk of `aliases` is fine) vs. `Index` (`upsert_batch`, an O(1) lookup
+/// against a batch-local `target_id -> alias ids` index built once up front
+/// by [`build_alias_index`] and kept in sync). Without this, `upsert_batch`'s
+/// oid-index fix alone still left this scan re-walking the (growing)
+/// `aliases` table once per entry — the other half of alm#695's O(n²).
+enum AliasLookup<'a> {
+    Scan,
+    Index(&'a mut HashMap<String, Vec<String>>),
+}
+
 /// Replace all alias rows for `target_id` wholesale, ensuring the primary
 /// designation is present as a `designation` alias and deduping by normalized
 /// form (mirrors the in-memory backend's `rewrite_aliases`).
@@ -413,21 +426,27 @@ fn rewrite_aliases(
     w: &redb::WriteTransaction,
     target_id: &str,
     identity: &ResolvedIdentity,
+    alias_lookup: &mut AliasLookup,
 ) -> Result<(), CacheError> {
     let mut table = w.open_table(ALIASES).map_err(cache_err)?;
 
-    let stale: Vec<String> = {
-        let mut keys = Vec::new();
-        for entry in table.iter().map_err(cache_err)? {
-            let (k, v) = entry.map_err(cache_err)?;
-            let sa: StoredAlias = serde_json::from_slice(v.value()).map_err(cache_err)?;
-            if sa.target_id == target_id {
-                keys.push(k.value().to_string());
+    let stale: Vec<String> = match alias_lookup {
+        AliasLookup::Scan => {
+            #[cfg(test)]
+            FULL_TABLE_SCAN_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            let mut keys = Vec::new();
+            for entry in table.iter().map_err(cache_err)? {
+                let (k, v) = entry.map_err(cache_err)?;
+                let sa: StoredAlias = serde_json::from_slice(v.value()).map_err(cache_err)?;
+                if sa.target_id == target_id {
+                    keys.push(k.value().to_string());
+                }
             }
+            keys
         }
-        keys
+        AliasLookup::Index(index) => index.remove(target_id).unwrap_or_default(),
     };
-    for k in stale {
+    for k in &stale {
         table.remove(k.as_str()).map_err(cache_err)?;
     }
 
@@ -439,6 +458,7 @@ fn rewrite_aliases(
     }
 
     let mut seen = HashSet::with_capacity(aliases.len());
+    let mut written = Vec::with_capacity(aliases.len());
     for alias in aliases {
         if !seen.insert(alias.normalized.clone()) {
             continue; // tolerate duplicate normalized forms within one identity
@@ -447,8 +467,55 @@ fn rewrite_aliases(
         let sa = StoredAlias { target_id: target_id.to_owned(), alias };
         let bytes = serde_json::to_vec(&sa).map_err(cache_err)?;
         table.insert(alias_id.as_str(), bytes.as_slice()).map_err(cache_err)?;
+        written.push(alias_id);
+    }
+
+    if let AliasLookup::Index(index) = alias_lookup {
+        index.insert(target_id.to_owned(), written);
     }
     Ok(())
+}
+
+/// One full scan of `aliases`, indexing every row's owning `target_id`.
+/// `upsert_batch` runs this exactly once per batch — the alias-side twin of
+/// [`build_oid_index`], fixing the other half of the O(n²) blowup.
+fn build_alias_index(
+    w: &redb::WriteTransaction,
+) -> Result<HashMap<String, Vec<String>>, CacheError> {
+    #[cfg(test)]
+    FULL_TABLE_SCAN_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let table = w.open_table(ALIASES).map_err(cache_err)?;
+    let mut index: HashMap<String, Vec<String>> = HashMap::new();
+    for entry in table.iter().map_err(cache_err)? {
+        let (k, v) = entry.map_err(cache_err)?;
+        let sa: StoredAlias = serde_json::from_slice(v.value()).map_err(cache_err)?;
+        index.entry(sa.target_id).or_default().push(k.value().to_string());
+    }
+    Ok(index)
+}
+
+/// Test-only: counts every full-table scan done to find a target by oid
+/// (`OidLookup::Scan` / [`build_oid_index`]) or a target's aliases
+/// (`AliasLookup::Scan` / [`build_alias_index`]), so a unit test can assert
+/// `upsert_batch` collapses those scans to one each regardless of batch size
+/// (see the `upsert_batch_*` tests below). Zero cost outside test builds.
+#[cfg(test)]
+static FULL_TABLE_SCAN_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How [`upsert_within`] finds a row that already carries a given SIMBAD oid.
+///
+/// A single [`upsert`] call scans (`Scan`): one call, so an O(n) walk of
+/// `targets` is fine and this keeps that path byte-for-byte what it always
+/// was. [`upsert_batch`] instead builds one O(1) `oid -> (id, source)` index
+/// up front (`Index`, via [`build_oid_index`]) and keeps it in sync as the
+/// batch writes — the fix for nightwatch-astro/alm#695's O(n²) blowup: an
+/// n-entry batch used to re-scan the (growing) table once per entry.
+enum OidLookup<'a> {
+    /// Full-table scan, once per call.
+    Scan,
+    /// O(1) lookup against a batch-local index, updated after every write so
+    /// later entries in the same batch see accurate dedup state.
+    Index(&'a mut HashMap<i64, (String, TargetSource)>),
 }
 
 /// Upsert one identity against tables already open in `w`, without
@@ -462,57 +529,105 @@ fn upsert_within(
     w: &redb::WriteTransaction,
     identity: &ResolvedIdentity,
     namespace: &Uuid,
+    oid_lookup: &mut OidLookup,
+    alias_lookup: &mut AliasLookup,
 ) -> Result<(Uuid, UpsertOutcome), CacheError> {
     let derived_id =
         target_id_from_designation(namespace, &identity.primary_designation).to_string();
 
-    let (id_str, outcome, wrote_row) = {
+    // `existing`'s third field is the row's oid *before* this write (`None` if
+    // it never had one), so the tail below can retire a stale index entry if
+    // this write changes or clears the row's oid.
+    let (id_str, outcome, wrote_row, prior_oid) = {
         let mut targets = w.open_table(TARGETS).map_err(cache_err)?;
 
         // Find the row to upsert into: by oid when Some, else by derived id.
-        let mut existing: Option<(String, TargetSource)> = None;
+        let mut existing: Option<(String, TargetSource, Option<i64>)> = None;
         if let Some(oid) = identity.simbad_oid {
-            for entry in targets.iter().map_err(cache_err)? {
-                let (k, v) = entry.map_err(cache_err)?;
-                let st: StoredTarget = serde_json::from_slice(v.value()).map_err(cache_err)?;
-                if st.simbad_oid == Some(oid) {
-                    existing = Some((k.value().to_string(), st.source));
-                    break;
+            existing = match oid_lookup {
+                OidLookup::Scan => {
+                    #[cfg(test)]
+                    FULL_TABLE_SCAN_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let mut found = None;
+                    for entry in targets.iter().map_err(cache_err)? {
+                        let (k, v) = entry.map_err(cache_err)?;
+                        let st: StoredTarget =
+                            serde_json::from_slice(v.value()).map_err(cache_err)?;
+                        if st.simbad_oid == Some(oid) {
+                            found = Some((k.value().to_string(), st.source, Some(oid)));
+                            break;
+                        }
+                    }
+                    found
                 }
-            }
+                OidLookup::Index(index) => {
+                    index.get(&oid).map(|(id, source)| (id.clone(), *source, Some(oid)))
+                }
+            };
         }
         if existing.is_none() {
             if let Some(v) = targets.get(derived_id.as_str()).map_err(cache_err)? {
                 let st: StoredTarget = serde_json::from_slice(v.value()).map_err(cache_err)?;
-                existing = Some((derived_id.clone(), st.source));
+                existing = Some((derived_id.clone(), st.source, st.simbad_oid));
             }
         }
 
         match existing {
-            Some((id, source)) if !identity.source.may_overwrite(source) => {
-                (id, UpsertOutcome::SkippedUserOverride, false)
+            Some((id, source, _)) if !identity.source.may_overwrite(source) => {
+                (id, UpsertOutcome::SkippedUserOverride, false, None)
             }
-            Some((id, _)) => {
+            Some((id, _, prior_oid)) => {
                 let bytes = serde_json::to_vec(&StoredTarget::from_identity(identity))
                     .map_err(cache_err)?;
                 targets.insert(id.as_str(), bytes.as_slice()).map_err(cache_err)?;
-                (id, UpsertOutcome::Updated, true)
+                (id, UpsertOutcome::Updated, true, prior_oid)
             }
             None => {
                 let bytes = serde_json::to_vec(&StoredTarget::from_identity(identity))
                     .map_err(cache_err)?;
                 targets.insert(derived_id.as_str(), bytes.as_slice()).map_err(cache_err)?;
-                (derived_id.clone(), UpsertOutcome::Inserted, true)
+                (derived_id.clone(), UpsertOutcome::Inserted, true, None)
             }
         }
     };
 
     if wrote_row {
-        rewrite_aliases(w, &id_str, identity)?;
+        rewrite_aliases(w, &id_str, identity, alias_lookup)?;
+        if let OidLookup::Index(index) = oid_lookup {
+            if prior_oid != identity.simbad_oid {
+                if let Some(stale) = prior_oid {
+                    index.remove(&stale);
+                }
+            }
+            if let Some(oid) = identity.simbad_oid {
+                index.insert(oid, (id_str.clone(), identity.source));
+            }
+        }
     }
 
     let id = Uuid::parse_str(&id_str).map_err(|e| CacheError::InvalidUuid(id_str, e))?;
     Ok((id, outcome))
+}
+
+/// One full scan of `targets`, indexing every row that currently has an oid.
+/// `upsert_batch` runs this exactly once per batch (not once per entry) —
+/// that single scan is what turns an n-entry batch's total table-scan work
+/// from O(n²) back to O(n).
+fn build_oid_index(
+    w: &redb::WriteTransaction,
+) -> Result<HashMap<i64, (String, TargetSource)>, CacheError> {
+    #[cfg(test)]
+    FULL_TABLE_SCAN_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let targets = w.open_table(TARGETS).map_err(cache_err)?;
+    let mut index = HashMap::new();
+    for entry in targets.iter().map_err(cache_err)? {
+        let (k, v) = entry.map_err(cache_err)?;
+        let st: StoredTarget = serde_json::from_slice(v.value()).map_err(cache_err)?;
+        if let Some(oid) = st.simbad_oid {
+            index.insert(oid, (k.value().to_string(), st.source));
+        }
+    }
+    Ok(index)
 }
 
 /// Test-only: counts write transactions opened for an upsert (single or
@@ -536,7 +651,8 @@ fn upsert(
     namespace: &Uuid,
 ) -> Result<(Uuid, UpsertOutcome), CacheError> {
     let w = begin_upsert_txn(db)?;
-    let result = upsert_within(&w, identity, namespace)?;
+    let result =
+        upsert_within(&w, identity, namespace, &mut OidLookup::Scan, &mut AliasLookup::Scan)?;
     w.commit().map_err(cache_err)?;
     Ok(result)
 }
@@ -557,9 +673,17 @@ fn upsert_batch(
     namespace: &Uuid,
 ) -> Result<Vec<(Uuid, UpsertOutcome)>, CacheError> {
     let w = begin_upsert_txn(db)?;
+    let mut oid_index = build_oid_index(&w)?;
+    let mut alias_index = build_alias_index(&w)?;
     let mut results = Vec::with_capacity(identities.len());
     for identity in identities {
-        results.push(upsert_within(&w, identity, namespace)?);
+        results.push(upsert_within(
+            &w,
+            identity,
+            namespace,
+            &mut OidLookup::Index(&mut oid_index),
+            &mut AliasLookup::Index(&mut alias_index),
+        )?);
     }
     w.commit().map_err(cache_err)?;
     Ok(results)
@@ -922,11 +1046,11 @@ mod tests {
     }
 
     /// Serializes every test in this module that calls `upsert`/`upsert_batch`
-    /// against [`UPSERT_WRITE_TXN_COUNT`] readers — `cargo test` runs tests on
-    /// concurrent threads within one binary, and that counter is a single
-    /// process-wide static, so an unguarded interleaving would flake the
-    /// count. `tokio::sync::Mutex` (not `std::sync::Mutex`) because the guard
-    /// is held across `.await` points.
+    /// against [`UPSERT_WRITE_TXN_COUNT`]/[`FULL_TABLE_SCAN_COUNT`] readers —
+    /// `cargo test` runs tests on concurrent threads within one binary, and
+    /// those counters are process-wide statics, so an unguarded interleaving
+    /// would flake the counts. `tokio::sync::Mutex` (not `std::sync::Mutex`)
+    /// because the guard is held across `.await` points.
     static TXN_COUNT_GUARD: std::sync::LazyLock<tokio::sync::Mutex<()>> =
         std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
 
@@ -998,6 +1122,42 @@ mod tests {
             UPSERT_WRITE_TXN_COUNT.load(std::sync::atomic::Ordering::Relaxed),
             25,
             "25 sequential upsert calls must open one write transaction each"
+        );
+    }
+
+    /// Regression guard for nightwatch-astro/alm#695's O(n²) defect:
+    /// `upsert_within`'s old oid dedup *and* its `rewrite_aliases` call both
+    /// re-scanned their whole (growing) table once per entry. `upsert_batch`
+    /// must instead do exactly one full scan of each (`build_oid_index` +
+    /// `build_alias_index`) per batch call, regardless of batch size —
+    /// asserted here directly via the scan counter rather than by timing,
+    /// since a count assertion can't flake on a slow CI runner.
+    #[tokio::test]
+    async fn upsert_batch_does_one_full_scan_per_table_regardless_of_batch_size() {
+        let _guard = TXN_COUNT_GUARD.lock().await;
+        FULL_TABLE_SCAN_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let ns = crate::identity::namespace("redb.tests.batch-scan-count");
+        let identities = distinct_identities(50);
+
+        cache.upsert_batch(&identities, &ns).await.unwrap();
+        assert_eq!(
+            FULL_TABLE_SCAN_COUNT.load(std::sync::atomic::Ordering::Relaxed),
+            2,
+            "one upsert_batch call of 50 identities must do exactly one full-table oid scan \
+             (build_oid_index) plus one full-table alias scan (build_alias_index), total 2"
+        );
+
+        FULL_TABLE_SCAN_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+        for identity in &identities {
+            cache.upsert(identity, &ns).await.unwrap();
+        }
+        assert_eq!(
+            FULL_TABLE_SCAN_COUNT.load(std::sync::atomic::Ordering::Relaxed),
+            100,
+            "50 sequential upsert calls must each do their own oid scan + alias scan, total 100"
         );
     }
 

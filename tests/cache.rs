@@ -257,6 +257,52 @@ async fn upsert_batch_inserts_then_dedups_like_sequential_upsert(store: Store) {
     assert_eq!(cache.list().await.unwrap().len(), 2, "batch dedup must not duplicate rows");
 }
 
+/// Regression guard for nightwatch-astro/alm#695's O(n²) defect: bulk-loading
+/// N distinct-oid identities through `upsert_batch` used to re-scan the whole
+/// (growing) targets table once per entry (measured: 4,000 entries ~124s). A
+/// real seed re-warm is ~13k entries; 10k here on a file-backed (real fsync)
+/// store, under a generous 30s bound, proves the fix without being tight
+/// enough to flake on a slow CI runner.
+#[tokio::test]
+async fn upsert_batch_of_ten_thousand_completes_well_under_a_generous_bound() {
+    let path = unique_db_path();
+    let store = Store::open(&path).expect("file store");
+    let cache = store.cache();
+    let namespace = ns();
+
+    let identities: Vec<ResolvedIdentity> = (0..10_000)
+        .map(|i| {
+            let idx = u32::try_from(i).expect("10_000 fits in u32");
+            let designation = format!("Perf Guard Target {i}");
+            ResolvedIdentity {
+                simbad_oid: Some(1_000_000 + i64::from(idx)),
+                primary_designation: designation.clone(),
+                common_name: None,
+                object_type: ObjectType::Galaxy,
+                otype_raw: "G".to_owned(),
+                ra_deg: f64::from(idx % 360),
+                dec_deg: 0.0,
+                v_mag: None,
+                aliases: vec![ResolvedAlias::new(designation, AliasKind::Designation)],
+                source: TargetSource::Seed,
+            }
+        })
+        .collect();
+
+    let started = std::time::Instant::now();
+    let results = cache.upsert_batch(&identities, &namespace).await.unwrap();
+    let elapsed = started.elapsed();
+
+    assert_eq!(results.len(), 10_000);
+    assert!(
+        elapsed < std::time::Duration::from_secs(30),
+        "10k-entry upsert_batch took {elapsed:?}, expected well under 30s \
+         (pre-fix O(n^2) dedup made 4k entries alone take ~124s)"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}
+
 // ── search ranking ───────────────────────────────────────────────────────────
 
 async fn search_blank_query_is_empty(store: Store) {
