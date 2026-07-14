@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! `Cache` behaviour tests for the redb [`Store`], run against BOTH the
 //! in-memory and a temp-file store mode (each test is a free `async fn` over a
 //! `Store`, and `both_modes!` generates one `#[tokio::test]` per mode). Folds

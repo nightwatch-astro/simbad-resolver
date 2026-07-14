@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! `Queue` behaviour tests for the redb [`Store`], run against BOTH the
 //! in-memory and a temp-file store mode. Folds the coverage of the former
 //! dashmap and SQLite queue backends into one suite.

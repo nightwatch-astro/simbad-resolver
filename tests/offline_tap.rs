@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Offline HTTP-level tests for `TapResolver`, exercising the full
 //! `resolve` / `resolve_position` paths and every transport branch against a
 //! `wiremock` mock of the TAP sync endpoint — no network, so these run in CI

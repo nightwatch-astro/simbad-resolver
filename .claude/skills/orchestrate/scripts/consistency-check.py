@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 """orchestrate: graph/ledger consistency check (stdlib-only).
 
 The orchestrator's close-out go/no-go: cross-checks the DAG (graph.json)

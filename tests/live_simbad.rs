@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Live SIMBAD integration tests — hit the real CDS TAP service.
 //!
 //! These are `#[ignore]`-gated so ordinary `cargo test` stays hermetic and

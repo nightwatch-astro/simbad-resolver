@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 //! Offline HTTP-level tests for `SesameResolver` against a `wiremock` mock of
 //! the CDS Sesame `-oxp` endpoint — no network, so these run in CI
 //! (`tests/live.rs` covers the same path against real Sesame but is
