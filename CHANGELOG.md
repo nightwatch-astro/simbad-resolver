@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.2](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.1...simbad-resolver-v0.3.2) (2026-07-14)
+
+
+### Features
+
+* **cache:** opt-in Eventual durability for upsert_batch + explicit flush ([#27](https://github.com/nightwatch-astro/simbad-resolver/issues/27)) ([4295e66](https://github.com/nightwatch-astro/simbad-resolver/commit/4295e66381e94a19086dd3bde2daf4c271132178))
+
 ## [0.3.1](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.0...simbad-resolver-v0.3.1) (2026-07-14)
 
 
