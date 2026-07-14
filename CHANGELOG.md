@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.3.0](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.2.3...simbad-resolver-v0.3.0) (2026-07-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* relicense from Apache-2.0 to MPL-2.0 ([#21](https://github.com/nightwatch-astro/simbad-resolver/issues/21))
+
+### Features
+
+* **cache:** add Cache::upsert_batch, one write transaction per batch ([#24](https://github.com/nightwatch-astro/simbad-resolver/issues/24)) ([40c401c](https://github.com/nightwatch-astro/simbad-resolver/commit/40c401c3de68b74148fde95a1628b3bb4499c916))
+
+
+### Bug Fixes
+
+* use GitHub App token for CLA bot instead of PAT ([#23](https://github.com/nightwatch-astro/simbad-resolver/issues/23)) ([392208d](https://github.com/nightwatch-astro/simbad-resolver/commit/392208dff2aec87890a89c8712affea177ec17c5))
+
+
+### Miscellaneous Chores
+
+* relicense from Apache-2.0 to MPL-2.0 ([#21](https://github.com/nightwatch-astro/simbad-resolver/issues/21)) ([74ac44a](https://github.com/nightwatch-astro/simbad-resolver/commit/74ac44adb463a7ce5d686ed5c18af6a0ac912c9a))
+
 ## [0.2.3](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.2.2...simbad-resolver-v0.2.3) (2026-07-13)
 
 
