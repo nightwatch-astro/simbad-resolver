@@ -12,8 +12,8 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use simbad_resolver::identity::namespace;
 use simbad_resolver::normalize::normalize;
 use simbad_resolver::{
-    AliasKind, Cache, ObjectType, ResolvedAlias, ResolvedIdentity, Store, TargetSource,
-    UpsertOutcome, RANK_EXACT, RANK_PREFIX, RANK_SUBSTRING,
+    AliasKind, BatchDurability, Cache, ObjectType, ResolvedAlias, ResolvedIdentity, Store,
+    TargetSource, UpsertOutcome, RANK_EXACT, RANK_PREFIX, RANK_SUBSTRING,
 };
 use uuid::Uuid;
 
@@ -298,6 +298,95 @@ async fn upsert_batch_of_ten_thousand_completes_well_under_a_generous_bound() {
         elapsed < std::time::Duration::from_secs(30),
         "10k-entry upsert_batch took {elapsed:?}, expected well under 30s \
          (pre-fix O(n^2) dedup made 4k entries alone take ~124s)"
+    );
+
+    let _ = std::fs::remove_file(&path);
+}
+
+// ── BatchDurability (nightwatch-astro/alm#695 chunked-warm follow-up) ───────
+
+/// [`Cache::upsert_batch`] against a plain [`Store::open`] (default
+/// [`BatchDurability::Durable`]) must still survive a full close + reopen
+/// with no other action needed — the new durability knob must not change
+/// this pre-existing method's behavior for callers who never opt in.
+#[tokio::test]
+async fn default_upsert_batch_path_is_still_fully_durable() {
+    let path = unique_db_path();
+    {
+        let store = Store::open(&path).expect("file store");
+        let cache = store.cache();
+        cache.upsert_batch(&[m31(TargetSource::Resolved), m101()], &ns()).await.unwrap();
+    } // full close: drops the Store (and its redb::Database)
+
+    let reopened = Store::open(&path).expect("reopen file store");
+    let rows = reopened.cache().list().await.unwrap();
+    assert_eq!(rows.len(), 2, "plain upsert_batch must still be durable with no follow-up commit");
+
+    let _ = std::fs::remove_file(&path);
+}
+
+/// An `Eventual`-durability `upsert_batch` commit is visible to reads against
+/// the same open `Store` right away — durability only affects crash
+/// survival, not in-process visibility.
+#[tokio::test]
+async fn eventual_batch_entries_are_immediately_queryable() {
+    let path = unique_db_path();
+    let store = Store::open_with(&path, BatchDurability::Eventual).expect("file store");
+    let cache = store.cache();
+
+    let results = cache.upsert_batch(&[m31(TargetSource::Resolved)], &ns()).await.unwrap();
+    assert_eq!(results[0].1, UpsertOutcome::Inserted);
+
+    let got = cache.get_by_id(results[0].0).await.unwrap();
+    assert_eq!(got.map(|t| t.primary_designation), Some("M 31".to_owned()));
+
+    let _ = std::fs::remove_file(&path);
+}
+
+/// The core chunked-load contract: with the store opened `Eventual`, N
+/// `upsert_batch` chunks (no fsync each) followed by exactly one
+/// [`RedbCache::flush`] must persist *every* chunk — not just the last one —
+/// across a full close + reopen. Proven with 2 chunks; redb commits are
+/// cumulative, so this generalizes to any chunk count.
+#[tokio::test]
+async fn flush_persists_every_prior_eventual_batch_across_reopen() {
+    let path = unique_db_path();
+    let namespace = ns();
+    {
+        let store = Store::open_with(&path, BatchDurability::Eventual).expect("file store");
+        let cache = store.cache();
+        cache.upsert_batch(&[m31(TargetSource::Resolved)], &namespace).await.unwrap();
+        cache.upsert_batch(&[m101()], &namespace).await.unwrap();
+        cache.flush().await.unwrap();
+    } // full close, no further commits after flush()
+
+    let reopened = Store::open_with(&path, BatchDurability::Eventual).expect("reopen file store");
+    let rows = reopened.cache().list().await.unwrap();
+    assert_eq!(rows.len(), 2, "flush() must persist both prior Eventual chunks, not just the last");
+    assert!(rows.iter().any(|r| r.primary_designation == "M 31"));
+    assert!(rows.iter().any(|r| r.primary_designation == "M 101"));
+
+    let _ = std::fs::remove_file(&path);
+}
+
+/// Single-item [`Cache::upsert`] must stay durable regardless of the store's
+/// configured bulk `BatchDurability` — point writes are never traded away,
+/// only `upsert_batch` opts into `Eventual`.
+#[tokio::test]
+async fn single_item_upsert_stays_durable_even_under_eventual_bulk_policy() {
+    let path = unique_db_path();
+    {
+        let store = Store::open_with(&path, BatchDurability::Eventual).expect("file store");
+        let cache = store.cache();
+        cache.upsert(&m31(TargetSource::Resolved), &ns()).await.unwrap();
+    } // full close, no flush() and no upsert_batch call at all
+
+    let reopened = Store::open_with(&path, BatchDurability::Eventual).expect("reopen file store");
+    let rows = reopened.cache().list().await.unwrap();
+    assert_eq!(
+        rows.len(),
+        1,
+        "a single-item upsert must be durable even when bulk_durability is Eventual"
     );
 
     let _ = std::fs::remove_file(&path);
