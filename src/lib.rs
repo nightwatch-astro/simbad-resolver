@@ -1,3 +1,7 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
+
 // The README is the docs.rs crate-root landing page; its own `rust` fences are
 // this crate's doctests (network ones `no_run`, offline ones runnable — see
 // README.md's per-section notes). Keep prose in the README, not duplicated here.
