@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.1](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.0...simbad-resolver-v0.3.1) (2026-07-14)
+
+
+### Bug Fixes
+
+* **cache:** make upsert_batch's dedup O(n) instead of O(n²) ([#25](https://github.com/nightwatch-astro/simbad-resolver/issues/25)) ([3a8af16](https://github.com/nightwatch-astro/simbad-resolver/commit/3a8af16e852daab39b22b78072eede09ea4563cf))
+
 ## [0.3.0](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.2.3...simbad-resolver-v0.3.0) (2026-07-14)
 
 
