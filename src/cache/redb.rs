@@ -451,14 +451,20 @@ fn rewrite_aliases(
     Ok(())
 }
 
-fn upsert(
-    db: &Database,
+/// Upsert one identity against tables already open in `w`, without
+/// committing. Shared by [`upsert`] (one identity, one transaction) and
+/// [`upsert_batch`] (many identities, one transaction) so a batch gets the
+/// exact same per-entry dedup + precedence decision as a sequential loop of
+/// single upserts — including deduping against an earlier identity of the
+/// same batch, since reads here see this transaction's own uncommitted
+/// writes.
+fn upsert_within(
+    w: &redb::WriteTransaction,
     identity: &ResolvedIdentity,
     namespace: &Uuid,
 ) -> Result<(Uuid, UpsertOutcome), CacheError> {
     let derived_id =
         target_id_from_designation(namespace, &identity.primary_designation).to_string();
-    let w = db.begin_write().map_err(cache_err)?;
 
     let (id_str, outcome, wrote_row) = {
         let mut targets = w.open_table(TARGETS).map_err(cache_err)?;
@@ -502,12 +508,61 @@ fn upsert(
     };
 
     if wrote_row {
-        rewrite_aliases(&w, &id_str, identity)?;
+        rewrite_aliases(w, &id_str, identity)?;
     }
-    w.commit().map_err(cache_err)?;
 
     let id = Uuid::parse_str(&id_str).map_err(|e| CacheError::InvalidUuid(id_str, e))?;
     Ok((id, outcome))
+}
+
+/// Test-only: counts write transactions opened for an upsert (single or
+/// batch), so a unit test can assert `upsert_batch` collapses N transactions
+/// into 1 (see the `upsert_batch_*` tests below). Zero cost outside test
+/// builds.
+#[cfg(test)]
+static UPSERT_WRITE_TXN_COUNT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Begin the one write transaction an upsert (single or batch) runs in,
+/// counting it in test builds via [`UPSERT_WRITE_TXN_COUNT`].
+fn begin_upsert_txn(db: &Database) -> Result<redb::WriteTransaction, CacheError> {
+    #[cfg(test)]
+    UPSERT_WRITE_TXN_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    db.begin_write().map_err(cache_err)
+}
+
+fn upsert(
+    db: &Database,
+    identity: &ResolvedIdentity,
+    namespace: &Uuid,
+) -> Result<(Uuid, UpsertOutcome), CacheError> {
+    let w = begin_upsert_txn(db)?;
+    let result = upsert_within(&w, identity, namespace)?;
+    w.commit().map_err(cache_err)?;
+    Ok(result)
+}
+
+/// Upsert every identity in `identities` in one write transaction (one
+/// backend commit total instead of one per entry — see `docs/adr/` and issue
+/// nightwatch-astro/alm#695 for why this matters for large seed warms).
+///
+/// Per-entry semantics are identical to calling [`upsert`] in a loop: each
+/// entry is deduped/precedence-checked against both already-committed rows and
+/// rows written earlier in this same batch. If any entry errors, the whole
+/// transaction is dropped unread (redb aborts an uncommitted write
+/// transaction), so a batch either fully applies or leaves the store
+/// untouched.
+fn upsert_batch(
+    db: &Database,
+    identities: &[ResolvedIdentity],
+    namespace: &Uuid,
+) -> Result<Vec<(Uuid, UpsertOutcome)>, CacheError> {
+    let w = begin_upsert_txn(db)?;
+    let mut results = Vec::with_capacity(identities.len());
+    for identity in identities {
+        results.push(upsert_within(&w, identity, namespace)?);
+    }
+    w.commit().map_err(cache_err)?;
+    Ok(results)
 }
 
 fn add_user_alias(db: &Database, target_id: Uuid, alias: &str) -> Result<bool, CacheError> {
@@ -635,6 +690,19 @@ impl Cache for RedbCache {
         let identity = identity.clone();
         let namespace = *namespace;
         tokio::task::spawn_blocking(move || upsert(&db, &identity, &namespace))
+            .await
+            .map_err(cache_err)?
+    }
+
+    async fn upsert_batch(
+        &self,
+        identities: &[ResolvedIdentity],
+        namespace: &Uuid,
+    ) -> Result<Vec<(Uuid, UpsertOutcome)>, CacheError> {
+        let db = self.db.clone();
+        let identities = identities.to_vec();
+        let namespace = *namespace;
+        tokio::task::spawn_blocking(move || upsert_batch(&db, &identities, &namespace))
             .await
             .map_err(cache_err)?
     }
@@ -853,8 +921,18 @@ mod tests {
         panic!("alias {display:?} not found");
     }
 
+    /// Serializes every test in this module that calls `upsert`/`upsert_batch`
+    /// against [`UPSERT_WRITE_TXN_COUNT`] readers — `cargo test` runs tests on
+    /// concurrent threads within one binary, and that counter is a single
+    /// process-wide static, so an unguarded interleaving would flake the
+    /// count. `tokio::sync::Mutex` (not `std::sync::Mutex`) because the guard
+    /// is held across `.await` points.
+    static TXN_COUNT_GUARD: std::sync::LazyLock<tokio::sync::Mutex<()>> =
+        std::sync::LazyLock::new(|| tokio::sync::Mutex::new(()));
+
     #[tokio::test]
     async fn remove_user_alias_only_removes_user_kind() {
+        let _guard = TXN_COUNT_GUARD.lock().await;
         let store = Store::in_memory().unwrap();
         let cache = store.cache();
         let ns = crate::identity::namespace("redb.tests");
@@ -869,5 +947,107 @@ mod tests {
         let designation_id = alias_id_of(&store.db, "M 31");
         assert!(!cache.remove_user_alias(&designation_id).await.unwrap());
         assert_eq!(cache.get_by_id(id).await.unwrap().unwrap().aliases.len(), 3);
+    }
+
+    /// `identities[i]` is a distinct target: distinct oid, designation, and
+    /// aliases, so batching them never collides on dedup.
+    fn distinct_identities(n: usize) -> Vec<ResolvedIdentity> {
+        (0..n)
+            .map(|i| {
+                let idx = u32::try_from(i).expect("test batch sizes fit in u32");
+                let designation = format!("Batch Target {i}");
+                ResolvedIdentity {
+                    simbad_oid: Some(9_000_000 + i64::from(idx)),
+                    primary_designation: designation.clone(),
+                    common_name: None,
+                    object_type: ObjectType::Galaxy,
+                    otype_raw: "G".to_owned(),
+                    ra_deg: f64::from(idx % 360),
+                    dec_deg: 0.0,
+                    v_mag: None,
+                    aliases: vec![ResolvedAlias::new(designation, AliasKind::Designation)],
+                    source: TargetSource::Seed,
+                }
+            })
+            .collect()
+    }
+
+    #[tokio::test]
+    async fn upsert_batch_uses_one_write_transaction_regardless_of_batch_size() {
+        let _guard = TXN_COUNT_GUARD.lock().await;
+        UPSERT_WRITE_TXN_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let ns = crate::identity::namespace("redb.tests.batch-txn-count");
+        let identities = distinct_identities(25);
+
+        let results = cache.upsert_batch(&identities, &ns).await.unwrap();
+        assert_eq!(results.len(), 25);
+        assert_eq!(
+            UPSERT_WRITE_TXN_COUNT.load(std::sync::atomic::Ordering::Relaxed),
+            1,
+            "one upsert_batch call of 25 identities must open exactly one write transaction"
+        );
+
+        UPSERT_WRITE_TXN_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+        for identity in &identities {
+            cache.upsert(identity, &ns).await.unwrap();
+        }
+        assert_eq!(
+            UPSERT_WRITE_TXN_COUNT.load(std::sync::atomic::Ordering::Relaxed),
+            25,
+            "25 sequential upsert calls must open one write transaction each"
+        );
+    }
+
+    /// `upsert_batch` must apply the exact same per-entry dedup + precedence
+    /// rules as a sequential loop of single `upsert` calls — including
+    /// `SkippedUserOverride`, and including dedup against an earlier entry of
+    /// the *same* batch (a batch may legitimately re-touch a target, e.g. a
+    /// seed re-warm after a user override was already recorded).
+    #[tokio::test]
+    async fn upsert_batch_matches_sequential_upsert_semantics() {
+        // This test doesn't read UPSERT_WRITE_TXN_COUNT, but it does call
+        // upsert/upsert_batch, which increments that shared static — hold the
+        // same guard so it can't skew a concurrently-running txn-count test.
+        let _guard = TXN_COUNT_GUARD.lock().await;
+        let ns = crate::identity::namespace("redb.tests.batch-semantics");
+
+        // A user override recorded first must survive a batch that later
+        // tries to overwrite the same oid with a lower-precedence source.
+        let store = Store::in_memory().unwrap();
+        let cache = store.cache();
+        let (override_id, _) = cache.upsert(&m31(), &ns).await.unwrap(); // TargetSource::Resolved
+        let mut user_override = m31();
+        user_override.source = TargetSource::UserOverride;
+        "My Andromeda".clone_into(&mut user_override.primary_designation);
+        cache.upsert(&user_override, &ns).await.unwrap();
+
+        let mut reseed = m31(); // TargetSource::Resolved, same oid: must be skipped
+        "WRONG".clone_into(&mut reseed.primary_designation);
+        let mut other = distinct_identities(1).remove(0);
+        let batch = vec![other.clone(), reseed.clone()];
+        let outcomes = cache.upsert_batch(&batch, &ns).await.unwrap();
+        assert_eq!(outcomes[1].0, override_id);
+        assert_eq!(outcomes[1].1, UpsertOutcome::SkippedUserOverride);
+        let got = cache.get_by_id(override_id).await.unwrap().unwrap();
+        assert_eq!(got.primary_designation, "My Andromeda", "user override stays sticky");
+
+        // A batch that upserts the same never-before-seen designation twice
+        // (no oid, so dedup falls back to the derived id) must dedup the
+        // second entry against the *first entry of the same batch*, not just
+        // against already-committed rows.
+        other.simbad_oid = None;
+        "Repeat Target".clone_into(&mut other.primary_designation);
+        let mut again = other.clone();
+        again.dec_deg = 12.5;
+        let batch2 = vec![other.clone(), again];
+        let outcomes2 = cache.upsert_batch(&batch2, &ns).await.unwrap();
+        assert_eq!(outcomes2[0].1, UpsertOutcome::Inserted, "first-ever row for this designation");
+        assert_eq!(outcomes2[1].1, UpsertOutcome::Updated, "dedups against entry 0 of this batch");
+        assert_eq!(outcomes2[0].0, outcomes2[1].0, "same derived id, same row");
+        let got2 = cache.get_by_id(outcomes2[1].0).await.unwrap().unwrap();
+        assert!((got2.dec_deg - 12.5).abs() < f64::EPSILON, "batch entry 1's value won");
     }
 }

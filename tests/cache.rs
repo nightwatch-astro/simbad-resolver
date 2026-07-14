@@ -115,6 +115,7 @@ both_modes! {
     list_orders_by_primary_designation
     list_carries_aliases_for_resolved_target
     list_aliases_do_not_cross_contaminate
+    upsert_batch_inserts_then_dedups_like_sequential_upsert
 }
 
 // ── upsert dedup / precedence ────────────────────────────────────────────────
@@ -232,6 +233,28 @@ async fn aliases_rewritten_on_update(store: Store) {
     let got = cache.get_by_id(id).await.unwrap().unwrap();
     assert_eq!(got.aliases.len(), 1);
     assert_eq!(got.aliases[0].alias, "M 31");
+}
+
+/// `upsert_batch` (the redb backend's single-write-transaction override, or
+/// the default per-item loop for any other `Cache` impl) must dedup + report
+/// outcomes identically to calling `upsert` once per identity — exercised
+/// against both the in-memory and file-backed (real fsync) redb modes.
+async fn upsert_batch_inserts_then_dedups_like_sequential_upsert(store: Store) {
+    let cache = store.cache();
+    let identities = [m31(TargetSource::Resolved), m101()];
+
+    let inserted = cache.upsert_batch(&identities, &ns()).await.unwrap();
+    assert_eq!(inserted.len(), 2);
+    assert_eq!(inserted[0].1, UpsertOutcome::Inserted);
+    assert_eq!(inserted[1].1, UpsertOutcome::Inserted);
+    assert_eq!(cache.list().await.unwrap().len(), 2);
+
+    // Re-running the same batch must dedup by oid (each row updated in
+    // place), never duplicated — same as re-running `upsert` sequentially.
+    let updated = cache.upsert_batch(&identities, &ns()).await.unwrap();
+    assert_eq!(updated[0], (inserted[0].0, UpsertOutcome::Updated));
+    assert_eq!(updated[1], (inserted[1].0, UpsertOutcome::Updated));
+    assert_eq!(cache.list().await.unwrap().len(), 2, "batch dedup must not duplicate rows");
 }
 
 // ── search ranking ───────────────────────────────────────────────────────────

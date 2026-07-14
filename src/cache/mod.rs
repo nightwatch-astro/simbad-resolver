@@ -389,6 +389,56 @@ pub trait Cache: Send + Sync {
         namespace: &Uuid,
     ) -> Result<(Uuid, UpsertOutcome), CacheError>;
 
+    /// Upsert many identities under one `namespace`, in order, with the exact
+    /// same per-entry dedup + precedence semantics as calling [`Cache::upsert`]
+    /// once per identity (including [`UpsertOutcome::SkippedUserOverride`] and
+    /// dedup against earlier entries of the same batch).
+    ///
+    /// The default implementation simply loops over [`Cache::upsert`]. Warming
+    /// a large seed set (thousands of entries) through that default costs one
+    /// backend commit per entry; the built-in redb backend
+    /// ([`crate::cache::redb::RedbCache`]) overrides this to do the whole batch
+    /// in a single write transaction instead.
+    ///
+    /// ```
+    /// use simbad_resolver::{
+    ///     AliasKind, Cache, ObjectType, ResolvedAlias, ResolvedIdentity, Store, TargetSource,
+    ///     UpsertOutcome,
+    /// };
+    ///
+    /// # async fn run() -> Result<(), simbad_resolver::CacheError> {
+    /// let store = Store::in_memory()?;
+    /// let m31 = ResolvedIdentity {
+    ///     simbad_oid: Some(1_575_544), primary_designation: "M 31".to_owned(),
+    ///     common_name: None, object_type: ObjectType::Galaxy, otype_raw: "G".to_owned(),
+    ///     ra_deg: 10.684_708, dec_deg: 41.268_75, v_mag: Some(3.44),
+    ///     aliases: vec![ResolvedAlias::new("M 31", AliasKind::Designation)],
+    ///     source: TargetSource::Seed,
+    /// };
+    /// let results = store.cache().upsert_batch(&[m31], &uuid::Uuid::nil()).await?;
+    /// assert_eq!(results.len(), 1);
+    /// assert_eq!(results[0].1, UpsertOutcome::Inserted);
+    /// # Ok(()) }
+    /// ```
+    ///
+    /// # Errors
+    ///
+    /// Returns the first [`CacheError`] hit; entries already written before
+    /// that point in the batch remain committed (the default, per-item
+    /// implementation) or are rolled back together (the redb override, which
+    /// commits the whole batch atomically).
+    async fn upsert_batch(
+        &self,
+        identities: &[ResolvedIdentity],
+        namespace: &Uuid,
+    ) -> Result<Vec<(Uuid, UpsertOutcome)>, CacheError> {
+        let mut results = Vec::with_capacity(identities.len());
+        for identity in identities {
+            results.push(self.upsert(identity, namespace).await?);
+        }
+        Ok(results)
+    }
+
     /// Add a user alias (`kind = 'user'`). Returns `true` if newly inserted,
     /// `false` if it already existed (idempotent).
     ///
