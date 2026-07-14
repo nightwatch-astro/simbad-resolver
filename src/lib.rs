@@ -29,7 +29,7 @@ mod tap;
 mod types;
 
 pub use crate::batch::{BatchResolver, DrainSummary};
-pub use crate::cache::redb::{RedbCache, RedbQueue, Store};
+pub use crate::cache::redb::{BatchDurability, RedbCache, RedbQueue, Store};
 pub use crate::cache::{
     Cache, CacheError, CachedTarget, PendingItem, PendingState, Queue, QueueError, SearchHit,
     UpsertOutcome, RANK_EXACT, RANK_FUZZY, RANK_PREFIX, RANK_SUBSTRING,

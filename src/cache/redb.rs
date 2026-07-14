@@ -151,6 +151,43 @@ impl StoredPending {
 
 // ── Store ─────────────────────────────────────────────────────────────────────
 
+/// Write-transaction durability [`Cache::upsert_batch`] uses, configured once
+/// when a [`Store`] is opened (see [`Store::open_with`]) — not per call.
+/// Maps to `redb::Durability`: `Durable` -> `Immediate`, `Eventual` -> `None`.
+/// Single-item [`Cache::upsert`] always stays `Durable` regardless of this
+/// setting — point writes should stay durable; only a bulk batch load is
+/// worth trading that away.
+///
+/// Per redb's docs, a `None`-durability commit is visible to later
+/// reads/writes against the same open [`Database`] immediately, but "will not
+/// be persisted to disk unless followed by a commit with
+/// [`redb::Durability::Immediate`]" — so **only an unclean process
+/// termination** (a real crash/power-loss) *before* that later durable commit
+/// can roll it back. A clean shutdown is not at risk: redb's [`Database`]
+/// flushes and finalizes its on-disk header on `Drop` regardless of the last
+/// commit's durability, so an `Eventual` write left uncommitted-durably at
+/// process exit is still persisted once the process exits normally — the gap
+/// [`RedbCache::flush`] closes is the crash window *while the `Database`
+/// stays open*, not "forgetting to flush before exit".
+///
+/// Intended usage for a chunked bulk load (nightwatch-astro/alm#695: a
+/// 13k-entry seed warm split into e.g. 1000-entry chunks): open the store
+/// with `Eventual`, call [`Cache::upsert_batch`] once per chunk (none of them
+/// fsync), then call [`RedbCache::flush`] once right after the last chunk —
+/// don't wait for the store to close naturally, since it may stay open for
+/// the rest of the process's lifetime. redb commits are cumulative — each
+/// transaction's root builds on the last — so that one fsync persists every
+/// chunk, not just the last one.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub enum BatchDurability {
+    /// Every `upsert_batch` commit is fsync'd — today's only behavior.
+    #[default]
+    Durable,
+    /// `upsert_batch` commits skip the fsync; call [`RedbCache::flush`] once
+    /// after the last chunk to persist all of them in a single fsync.
+    Eventual,
+}
+
 /// An open redb database shared by a [`RedbCache`] and a [`RedbQueue`].
 ///
 /// Cloning is cheap (an `Arc` handle over one `redb::Database`), so
@@ -175,10 +212,14 @@ impl StoredPending {
 #[derive(Clone)]
 pub struct Store {
     db: Arc<Database>,
+    bulk_durability: BatchDurability,
 }
 
 impl Store {
-    /// Open (creating if missing) a durable, file-backed store at `path`.
+    /// Open (creating if missing) a durable, file-backed store at `path`,
+    /// with the default [`BatchDurability::Durable`] bulk-load policy —
+    /// exactly today's behavior. See [`Store::open_with`] to opt into
+    /// [`BatchDurability::Eventual`] batch loads.
     ///
     /// # Errors
     ///
@@ -197,12 +238,32 @@ impl Store {
     /// # Ok(()) }
     /// ```
     pub fn open(path: impl AsRef<Path>) -> Result<Self, CacheError> {
-        let db = Database::create(path).map_err(cache_err)?;
-        init_tables(&db)?;
-        Ok(Self { db: Arc::new(db) })
+        Self::open_with(path, BatchDurability::default())
     }
 
-    /// Open a fresh, ephemeral in-memory store (nothing persisted to disk).
+    /// Like [`Store::open`], but configuring the [`BatchDurability`] every
+    /// [`Cache::upsert_batch`] call against this store uses.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`CacheError::Backend`] if the database cannot be opened or its
+    /// tables cannot be initialised.
+    pub fn open_with(
+        path: impl AsRef<Path>,
+        bulk_durability: BatchDurability,
+    ) -> Result<Self, CacheError> {
+        let db = Database::create(path).map_err(cache_err)?;
+        init_tables(&db)?;
+        Ok(Self { db: Arc::new(db), bulk_durability })
+    }
+
+    /// Open a fresh, ephemeral in-memory store (nothing persisted to disk),
+    /// with the default [`BatchDurability::Durable`] bulk-load policy.
+    ///
+    /// [`BatchDurability::Eventual`] only matters for a file-backed store
+    /// (there's no "reopen after a crash" scenario for an in-memory one), so
+    /// unlike [`Store::open`] this has no `_with` variant; add one if that
+    /// changes.
     ///
     /// # Errors
     ///
@@ -213,13 +274,14 @@ impl Store {
             .create_with_backend(redb::backends::InMemoryBackend::new())
             .map_err(cache_err)?;
         init_tables(&db)?;
-        Ok(Self { db: Arc::new(db) })
+        Ok(Self { db: Arc::new(db), bulk_durability: BatchDurability::default() })
     }
 
-    /// A [`RedbCache`] over this store's database.
+    /// A [`RedbCache`] over this store's database, inheriting its configured
+    /// [`BatchDurability`].
     #[must_use]
     pub fn cache(&self) -> RedbCache {
-        RedbCache { db: self.db.clone() }
+        RedbCache { db: self.db.clone(), bulk_durability: self.bulk_durability }
     }
 
     /// A [`RedbQueue`] over this store's database.
@@ -247,6 +309,7 @@ fn init_tables(db: &Database) -> Result<(), CacheError> {
 #[derive(Clone)]
 pub struct RedbCache {
     db: Arc<Database>,
+    bulk_durability: BatchDurability,
 }
 
 /// The durable/ephemeral redb-backed [`Queue`].
@@ -659,7 +722,8 @@ fn upsert(
 
 /// Upsert every identity in `identities` in one write transaction (one
 /// backend commit total instead of one per entry — see `docs/adr/` and issue
-/// nightwatch-astro/alm#695 for why this matters for large seed warms).
+/// nightwatch-astro/alm#695 for why this matters for large seed warms), at
+/// the store's configured [`BatchDurability`] (see [`Store::open_with`]).
 ///
 /// Per-entry semantics are identical to calling [`upsert`] in a loop: each
 /// entry is deduped/precedence-checked against both already-committed rows and
@@ -671,8 +735,14 @@ fn upsert_batch(
     db: &Database,
     identities: &[ResolvedIdentity],
     namespace: &Uuid,
+    durability: BatchDurability,
 ) -> Result<Vec<(Uuid, UpsertOutcome)>, CacheError> {
-    let w = begin_upsert_txn(db)?;
+    let mut w = begin_upsert_txn(db)?;
+    // Only touch durability for the non-default case, so the `Durable` path
+    // is byte-for-byte what it always was (no new fallible call on it).
+    if durability == BatchDurability::Eventual {
+        w.set_durability(redb::Durability::None).map_err(cache_err)?;
+    }
     let mut oid_index = build_oid_index(&w)?;
     let mut alias_index = build_alias_index(&w)?;
     let mut results = Vec::with_capacity(identities.len());
@@ -687,6 +757,16 @@ fn upsert_batch(
     }
     w.commit().map_err(cache_err)?;
     Ok(results)
+}
+
+/// Force one fully durable (fsync'd) write commit, touching no data. redb
+/// commits are cumulative — each transaction's root builds on the last — so
+/// this persists every prior [`BatchDurability::Eventual`] `upsert_batch`
+/// commit too, not just anything new. See [`RedbCache::flush`].
+fn flush_durable(db: &Database) -> Result<(), CacheError> {
+    let w = db.begin_write().map_err(cache_err)?;
+    w.commit().map_err(cache_err)?;
+    Ok(())
 }
 
 fn add_user_alias(db: &Database, target_id: Uuid, alias: &str) -> Result<bool, CacheError> {
@@ -826,7 +906,8 @@ impl Cache for RedbCache {
         let db = self.db.clone();
         let identities = identities.to_vec();
         let namespace = *namespace;
-        tokio::task::spawn_blocking(move || upsert_batch(&db, &identities, &namespace))
+        let durability = self.bulk_durability;
+        tokio::task::spawn_blocking(move || upsert_batch(&db, &identities, &namespace, durability))
             .await
             .map_err(cache_err)?
     }
@@ -850,6 +931,33 @@ impl Cache for RedbCache {
     async fn list(&self) -> Result<Vec<CachedTarget>, CacheError> {
         let db = self.db.clone();
         tokio::task::spawn_blocking(move || list(&db)).await.map_err(cache_err)?
+    }
+}
+
+impl RedbCache {
+    /// Force one fully durable (fsync'd) commit against this store, touching
+    /// no data. Inherent (not on the `Cache` trait) because durability is a
+    /// redb-specific, storage-engine concept, not a portable identity-store
+    /// operation — callers need a concrete [`RedbCache`] (via
+    /// [`Store::cache`]), not just `impl Cache`/`dyn Cache`.
+    ///
+    /// Call this once right after the last chunk of a
+    /// [`BatchDurability::Eventual`] bulk load (see [`Store::open_with`]) —
+    /// don't rely on the store closing naturally to persist those chunks, as
+    /// it may stay open for the rest of the process's lifetime and a crash
+    /// any time before it closes would lose everything since the last durable
+    /// commit (see [`BatchDurability`] for the full crash-vs-clean-shutdown
+    /// distinction). redb commits are cumulative, so this one fsync persists
+    /// every prior `Eventual` `upsert_batch` commit too, not just this call.
+    /// A no-op-but-safe-to-call if this store's bulk durability is
+    /// [`BatchDurability::Durable`] (every write already fsyncs on its own).
+    ///
+    /// # Errors
+    ///
+    /// [`CacheError::Backend`] if the (empty) transaction fails to commit.
+    pub async fn flush(&self) -> Result<(), CacheError> {
+        let db = self.db.clone();
+        tokio::task::spawn_blocking(move || flush_durable(&db)).await.map_err(cache_err)?
     }
 }
 
