@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.3...simbad-resolver-v0.3.4) (2026-07-17)
+
+
+### Bug Fixes
+
+* **deps:** pick up skymath 0.4 parse_date_obs trailing-Z fix ([#34](https://github.com/nightwatch-astro/simbad-resolver/issues/34)) ([d8fec03](https://github.com/nightwatch-astro/simbad-resolver/commit/d8fec039a1398649c4466e49c0c8b82682b5df3b))
+
 ## [0.3.3](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.2...simbad-resolver-v0.3.3) (2026-07-17)
 
 
