@@ -10,6 +10,7 @@ edition = "2021"
 rust-version = "1.82"
 license = "MPL-2.0"
 repository = "https://github.com/nightwatch-astro/simbad-resolver"
+documentation = "https://docs.rs/simbad-resolver"
 authors = ["Sjors Robroek <s.robroek@vxsan.com>"]
 description = "SIMBAD astronomical target resolver for Rust: resolve names, designations, and positions to canonical identities, with a pluggable redb-backed cache."
 readme = "README.md"
