@@ -1,3 +1,12 @@
 {
-   "signedContributors": []
+  "signedContributors": [
+    {
+      "name": "srobroek",
+      "id": 7125988,
+      "comment_id": 5000530561,
+      "created_at": "2026-07-17T08:10:09Z",
+      "repoId": 1297387690,
+      "pullRequestNo": 29
+    }
+  ]
 }
