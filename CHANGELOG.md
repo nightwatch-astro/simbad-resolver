@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.3](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.2...simbad-resolver-v0.3.3) (2026-07-17)
+
+
+### Bug Fixes
+
+* store CLA signatures on unprotected branch, allowlist owner ([#30](https://github.com/nightwatch-astro/simbad-resolver/issues/30)) ([da6c996](https://github.com/nightwatch-astro/simbad-resolver/commit/da6c99625624e4db357cef730f0ced4638014754))
+
 ## [0.3.2](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.1...simbad-resolver-v0.3.2) (2026-07-14)
 
 
