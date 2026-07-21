@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.5](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.4...simbad-resolver-v0.3.5) (2026-07-21)
+
+
+### Bug Fixes
+
+* **deps:** bump skymath to 0.5 ([#37](https://github.com/nightwatch-astro/simbad-resolver/issues/37)) ([9de64c7](https://github.com/nightwatch-astro/simbad-resolver/commit/9de64c7c3f654fe37b046f9ea942cc673ef7cd77))
+
 ## [0.3.4](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.3...simbad-resolver-v0.3.4) (2026-07-17)
 
 
