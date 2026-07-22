@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.4.0](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.5...simbad-resolver-v0.4.0) (2026-07-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* ResolvedIdentity::position(), CachedTarget::position(), and PositionMatch::position() now return skymath 0.6.0 types. Downstream crates with skymath 0.5 annotations or bounds must update their direct dependency to 0.6.0.
+
+### Bug Fixes
+
+* migrate public coordinate types to skymath 0.6.0 ([b409b32](https://github.com/nightwatch-astro/simbad-resolver/commit/b409b3237a6c3b7c86eb4866d7499ce8d0d7576d))
+
 ## [0.3.5](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.3.4...simbad-resolver-v0.3.5) (2026-07-21)
 
 
