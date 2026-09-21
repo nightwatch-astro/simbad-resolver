@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.1](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.5.0...simbad-resolver-v0.5.1) (2026-09-21)
+
+
+### Features
+
+* add SIMBAD galdim angular-size columns ([#36](https://github.com/nightwatch-astro/simbad-resolver/issues/36)) ([2ceaac8](https://github.com/nightwatch-astro/simbad-resolver/commit/2ceaac8621dbfa8d96bb4c86001932488242e193))
+
 ## [0.5.0](https://github.com/nightwatch-astro/simbad-resolver/compare/simbad-resolver-v0.4.0...simbad-resolver-v0.5.0) (2026-07-24)
 
 
