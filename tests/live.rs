@@ -37,7 +37,7 @@ async fn tap_cone_search_near_m31_finds_it() {
         .resolve_position(10.684_708_3, 41.268_75, 0.2, 5)
         .await
         .expect("cone search succeeds");
-    assert!(!matches.is_empty());
+    assert!(!matches.is_empty(), "expected at least one match");
     let separations: Vec<f64> = matches.iter().map(|m| m.separation_deg).collect();
     let mut sorted = separations.clone();
     sorted.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -52,5 +52,5 @@ async fn sesame_resolves_m31() {
     let identity = resolver.resolve("M 31").await.expect("Sesame should resolve M 31");
     assert!((identity.ra_deg - 10.68).abs() < 0.5);
     assert!((identity.dec_deg - 41.27).abs() < 0.5);
-    assert!(!identity.primary_designation.is_empty());
+    assert!(!identity.primary_designation.is_empty(), "primary designation is empty");
 }

@@ -511,7 +511,8 @@ mod tests {
 
     #[test]
     fn parse_basic_rows_zero_rows_is_not_found_precondition() {
-        assert!(parse_basic_rows(EMPTY_BASIC_TSV).is_empty());
+        let rows = parse_basic_rows(EMPTY_BASIC_TSV);
+        assert!(rows.is_empty(), "expected no rows, got {rows:?}");
     }
 
     #[test]
