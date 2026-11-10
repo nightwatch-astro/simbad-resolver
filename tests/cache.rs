@@ -406,8 +406,10 @@ async fn single_item_upsert_stays_durable_even_under_eventual_bulk_policy() {
 async fn search_blank_query_is_empty(store: Store) {
     let cache = store.cache();
     seeded(&cache).await;
-    assert!(cache.search("   ", 20).await.unwrap().is_empty());
-    assert!(cache.search("M31", 0).await.unwrap().is_empty());
+    let blank = cache.search("   ", 20).await.unwrap();
+    assert!(blank.is_empty(), "blank query returned {blank:?}");
+    let zero = cache.search("M31", 0).await.unwrap();
+    assert!(zero.is_empty(), "zero limit returned {zero:?}");
 }
 
 async fn search_exact_match_ranks_first(store: Store) {
@@ -462,8 +464,10 @@ async fn search_like_wildcards_are_literal(store: Store) {
     let cache = store.cache();
     seeded(&cache).await;
     // Punctuation normalizes away, so neither matches any stored alias.
-    assert!(cache.search("%", 20).await.unwrap().is_empty());
-    assert!(cache.search("_", 20).await.unwrap().is_empty());
+    let percent = cache.search("%", 20).await.unwrap();
+    assert!(percent.is_empty(), "`%` matched as a wildcard: {percent:?}");
+    let underscore = cache.search("_", 20).await.unwrap();
+    assert!(underscore.is_empty(), "`_` matched as a wildcard: {underscore:?}");
 }
 
 // ── user aliases ─────────────────────────────────────────────────────────────

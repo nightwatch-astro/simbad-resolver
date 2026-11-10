@@ -91,7 +91,8 @@ async fn open_is_idempotent() {
     drop(first);
 
     let second = Store::open(&path).expect("second open re-runs cleanly");
-    assert!(second.cache().list().await.unwrap().is_empty());
+    let cached = second.cache().list().await.unwrap();
+    assert!(cached.is_empty(), "expected an empty cache, got {cached:?}");
     drop(second);
 
     let _ = std::fs::remove_file(&path);

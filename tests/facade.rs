@@ -208,13 +208,15 @@ async fn search_is_network_free_and_delegates_to_cache() {
 
     // Typeahead search consults the cache only — SC-001: no network resolution.
     let hits = f.search("andromeda", 10).await.unwrap();
-    assert!(!hits.is_empty());
+    assert!(!hits.is_empty(), "expected a hit for andromeda");
     assert!(hits.iter().any(|h| h.target.primary_designation == "M 31"));
     assert_eq!(f.resolver().call_count(), 1, "search performs no network resolution");
 
     // A blank query or a zero limit yields no hits.
-    assert!(f.search("   ", 10).await.unwrap().is_empty());
-    assert!(f.search("M 31", 0).await.unwrap().is_empty());
+    let blank = f.search("   ", 10).await.unwrap();
+    assert!(blank.is_empty(), "blank query returned {blank:?}");
+    let zero = f.search("M 31", 0).await.unwrap();
+    assert!(zero.is_empty(), "zero limit returned {zero:?}");
 }
 
 #[tokio::test]
@@ -300,7 +302,8 @@ async fn fuzzy_search_is_off_by_default() {
     // Same query, but no with_fuzzy(): exact/prefix/substring only → no hit.
     let f = facade(FakeResolver::new().with_response("M 31", m31()));
     f.resolve("M 31").await.unwrap();
-    assert!(f.search("galaxy andromeda", 10).await.unwrap().is_empty());
+    let hits = f.search("galaxy andromeda", 10).await.unwrap();
+    assert!(hits.is_empty(), "expected no hits, got {hits:?}");
 }
 
 #[tokio::test]
